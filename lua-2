@@ -51,9 +51,9 @@ local mouse_box = Drawing.new("Square")
 mouse_box.Visible = true
 mouse_box.ZIndex = 999
 mouse_box.Color = Color3.fromRGB(54, 57, 241)
-mouse_box.Thickness = 20
+mouse_box.Thickness = 2
 mouse_box.Size = Vector2.new(20, 20)
-mouse_box.Filled = true
+mouse_box.Filled = false
 
 local fov_circle = Drawing.new("Circle")
 fov_circle.Thickness = 1
@@ -100,7 +100,6 @@ end
 
 local Files = listfiles(string.format("%s/%s", "UniversalSilentAim", tostring(game.PlaceId)))
 
--- functions
 local function GetFiles()
     local out = {}
     for i = 1, #Files do
@@ -208,13 +207,16 @@ local function matchesClass(Player)
     return false
 end
 
+-- ============ GET CLOSEST PLAYER ============
 local function getClosestPlayer()
     if not Options.TargetPart.Value then return end
     local Closest
     local DistanceToMouse
     for _, Player in next, GetPlayers(Players) do
         if Player == LocalPlayer then continue end
-        if Toggles.TeamCheck.Value and Player.Team == LocalPlayer.Team then continue end
+        if SilentAimSettings.TeamCheck and Player.Team == LocalPlayer.Team then
+            continue
+        end
         if not matchesClass(Player) then continue end
         local Character = Player.Character
         if not Character then continue end
@@ -233,19 +235,226 @@ local function getClosestPlayer()
     return Closest
 end
 
+-- ============ ESP SYSTEM (60 FPS OPTIMIZED) ============
+local ESP_Enabled = false
+local ESP_Team = false
+local ESP_Highlight = true
+local ESP_Name = true
+local ESP_Health = true
+local ESP_Trace = false
+local ESP_MaxDistance = 1500
+local ESP_HighlightColor = Color3.fromRGB(54, 57, 241)
+local ESP_NameColor = Color3.fromRGB(255, 255, 255)
+local ESP_HPColor = Color3.fromRGB(80, 255, 100)
+local ESP_TraceColor = Color3.fromRGB(54, 57, 241)
+
+local espCache = {}
+local ESP_UPDATE_INTERVAL = 1 / 60
+local HIGHLIGHT_CHECK_INTERVAL = 0.15
+local DISTANCE_CULL = 1.2
+local lastESPUpdate = 0
+local lastHighlightUpdate = 0
+
+local function getTeamColor(player)
+    local ok, color = pcall(function()
+        if player.Team and player.Team.TeamColor then
+            return player.Team.TeamColor.Color
+        end
+        return ESP_HighlightColor
+    end)
+    if ok and color then return color end
+    return ESP_HighlightColor
+end
+
+local function newESP(player)
+    local d = {
+        name = Drawing.new("Text"),
+        hpBack = Drawing.new("Line"),
+        hpBar = Drawing.new("Line"),
+        trace = Drawing.new("Line"),
+    }
+    d.name.Size = 13
+    d.name.Center = true
+    d.name.Outline = true
+    d.name.Color = ESP_NameColor
+    d.name.Visible = false
+
+    d.hpBack.Thickness = 3
+    d.hpBack.Color = Color3.fromRGB(30, 30, 30)
+    d.hpBack.Visible = false
+
+    d.hpBar.Thickness = 3
+    d.hpBar.Color = ESP_HPColor
+    d.hpBar.Visible = false
+
+    d.trace.Thickness = 1
+    d.trace.Color = ESP_TraceColor
+    d.trace.Visible = false
+
+    espCache[player] = d
+    return d
+end
+
+local function clearESP(player)
+    local d = espCache[player]
+    if d then
+        for key, obj in pairs(d) do
+            if typeof(obj) == "userdata" then
+                pcall(function() obj:Remove() end)
+            end
+        end
+        espCache[player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(function(p) clearESP(p) end)
+
+local function hideESP(d)
+    if d.name.Visible then d.name.Visible = false end
+    if d.hpBack.Visible then d.hpBack.Visible = false end
+    if d.hpBar.Visible then d.hpBar.Visible = false end
+    if d.trace.Visible then d.trace.Visible = false end
+end
+
+local function updateESP()
+    local now = tick()
+    if now - lastESPUpdate < ESP_UPDATE_INTERVAL then return end
+    lastESPUpdate = now
+
+    local canUpdateHighlight = (now - lastHighlightUpdate) >= HIGHLIGHT_CHECK_INTERVAL
+    if canUpdateHighlight then lastHighlightUpdate = now end
+
+    local camPos = Camera.CFrame.Position
+    local viewport = Camera.ViewportSize
+    local centerX = viewport.X / 2
+    local viewportY = viewport.Y
+    local maxDist = ESP_MaxDistance * DISTANCE_CULL
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local d = espCache[player]
+        local char = player.Character
+
+        if not ESP_Enabled then
+            if d then hideESP(d) end
+            if canUpdateHighlight and char then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+            continue
+        end
+
+        if not char then
+            if d then hideESP(d) end
+            continue
+        end
+
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then
+            if d then hideESP(d) end
+            continue
+        end
+
+        local dist = (camPos - hrp.Position).Magnitude
+        if dist > maxDist then
+            if d then hideESP(d) end
+            if canUpdateHighlight then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+            continue
+        end
+
+        if not d then d = newESP(player) end
+
+        local head = char:FindFirstChild("Head") or hrp
+        local screenHead, onScreen = WorldToViewportPoint(Camera, head.Position + Vector3.new(0, 1.5, 0))
+        if not onScreen then
+            hideESP(d)
+            continue
+        end
+
+        if ESP_Name then
+            if not d.name.Visible then d.name.Visible = true end
+            d.name.Text = player.DisplayName
+            d.name.Position = Vector2.new(screenHead.X, screenHead.Y - 20)
+            d.name.Color = ESP_NameColor
+        elseif d.name.Visible then
+            d.name.Visible = false
+        end
+
+        if ESP_Health then
+            local topY = screenHead.Y - 32
+            if not d.hpBack.Visible then d.hpBack.Visible = true end
+            if not d.hpBar.Visible then d.hpBar.Visible = true end
+            d.hpBack.From = Vector2.new(screenHead.X - 28, topY)
+            d.hpBack.To = Vector2.new(screenHead.X + 28, topY)
+            local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+            d.hpBar.From = Vector2.new(screenHead.X - 28, topY)
+            d.hpBar.To = Vector2.new(screenHead.X - 28 + 56 * pct, topY)
+            d.hpBar.Color = ESP_HPColor
+        else
+            if d.hpBack.Visible then d.hpBack.Visible = false end
+            if d.hpBar.Visible then d.hpBar.Visible = false end
+        end
+
+        if ESP_Trace then
+            if not d.trace.Visible then d.trace.Visible = true end
+            d.trace.From = Vector2.new(centerX, viewportY)
+            d.trace.To = Vector2.new(screenHead.X, screenHead.Y)
+            local tc = ESP_Team and getTeamColor(player) or ESP_TraceColor
+            if d.trace.Color ~= tc then d.trace.Color = tc end
+        elseif d.trace.Visible then
+            d.trace.Visible = false
+        end
+
+        if canUpdateHighlight then
+            if ESP_Highlight then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if not hl then
+                    hl = Instance.new("Highlight")
+                    hl.Name = "SpentHubHL"
+                    hl.Adornee = char
+                    hl.FillTransparency = 1
+                    hl.OutlineTransparency = 0
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.Parent = char
+                end
+                local wantColor = ESP_Team and getTeamColor(player) or ESP_HighlightColor
+                if hl.OutlineColor ~= wantColor then hl.OutlineColor = wantColor end
+            else
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+        end
+    end
+end
+
 -- ui creating & handling
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua"))()
-Library:SetWatermark("github.com/Averiias")
+local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua"))()
 
 local Window = Library:CreateWindow({
-    Title = 'Universal Silent Aim',
+    Title = 'SPENT HUB · Universal Silent Aim',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
     MenuFadeTime = 0.2
 })
 
-local GeneralTab = Window:AddTab("General")
+local Tabs = {
+    Main = Window:AddTab("Main"),
+    ESP = Window:AddTab("ESP"),
+    Visuals = Window:AddTab("Visuals"),
+    Config = Window:AddTab("Config"),
+    Logs = Window:AddTab("Update Logs"),
+    ["UI Settings"] = Window:AddTab("UI Settings"),
+}
+
+-- ============ MAIN TAB ============
+local GeneralTab = Tabs.Main
 local MainBOX = GeneralTab:AddLeftTabbox("Main")
 do
     local Main = MainBOX:AddTab("Main")
@@ -286,7 +495,7 @@ do
         SilentAimSettings.HitChance = Options.HitChance.Value
     end)
 
-    -- ============ TARGET TEAM ============
+    -- Target Team
     Main:AddToggle("TargetInmate", {Text = "Target Inmate", Default = SilentAimSettings.TargetInmate}):OnChanged(function()
         SilentAimSettings.TargetInmate = Toggles.TargetInmate.Value
     end)
@@ -298,9 +507,7 @@ do
     end)
 end
 
-local MiscellaneousBOX = GeneralTab:AddLeftTabbox("Miscellaneous")
 local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View")
-
 do
     local Main = FieldOfViewBOX:AddTab("Visuals")
     Main:AddToggle("Visible", {Text = "Show FOV Circle"}):AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)}):OnChanged(function()
@@ -315,7 +522,10 @@ do
         mouse_box.Visible = Toggles.MousePosition.Value
         SilentAimSettings.ShowSilentAimTarget = Toggles.MousePosition.Value
     end)
+end
 
+local MiscellaneousBOX = GeneralTab:AddLeftTabbox("Miscellaneous")
+do
     local PredictionTab = MiscellaneousBOX:AddTab("Prediction")
     PredictionTab:AddToggle("Prediction", {Text = "Mouse.Hit/Target Prediction"}):OnChanged(function()
         SilentAimSettings.MouseHitPrediction = Toggles.Prediction.Value
@@ -372,6 +582,103 @@ do
     end)
 end
 
+-- ============ ESP TAB ============
+local ESPMain = Tabs.ESP:AddLeftGroupbox("ESP")
+ESPMain:AddToggle("ESP_Enabled", {
+    Text = "Enable ESP",
+    Default = false,
+    Callback = function(v) ESP_Enabled = v end,
+})
+ESPMain:AddToggle("ESP_Team", {
+    Text = "Team Colors",
+    Default = false,
+    Tooltip = "Highlight and trace use team colors",
+    Callback = function(v) ESP_Team = v end,
+})
+
+local ESPElems = Tabs.ESP:AddRightGroupbox("Elements")
+ESPElems:AddToggle("ESP_Highlight", {
+    Text = "Highlight",
+    Default = true,
+    Callback = function(v) ESP_Highlight = v end,
+})
+ESPElems:AddToggle("ESP_Name", {
+    Text = "Name",
+    Default = true,
+    Callback = function(v) ESP_Name = v end,
+})
+ESPElems:AddToggle("ESP_Health", {
+    Text = "Health Bar",
+    Default = true,
+    Callback = function(v) ESP_Health = v end,
+})
+ESPElems:AddToggle("ESP_Trace", {
+    Text = "Trace Line",
+    Default = false,
+    Callback = function(v) ESP_Trace = v end,
+})
+ESPElems:AddSlider("ESP_MaxDistance", {
+    Text = "Max Distance",
+    Default = 1500,
+    Min = 100,
+    Max = 3000,
+    Rounding = 0,
+    Callback = function(v) ESP_MaxDistance = v end,
+})
+
+-- ============ VISUALS TAB ============
+local VisualGroup = Tabs.Visuals:AddLeftGroupbox("Drawing")
+VisualGroup:AddLabel("FOV Circle color and radius are configured in the Main tab → Field Of View.")
+VisualGroup:AddLabel("Silent Aim Target box color is configured in the Main tab.")
+
+-- ============ UPDATE LOGS TAB ============
+local LogsGroup = Tabs.Logs:AddLeftGroupbox("Changelog")
+LogsGroup:AddLabel("v1.0")
+LogsGroup:AddLabel("• Universal Silent Aim core")
+LogsGroup:AddLabel("• Raycast / FindPartOnRay / Whitelist / IgnoreList / Mouse.Hit")
+LogsGroup:AddLabel("• Target Team filtering (Inmate / Cop / Criminal)")
+LogsGroup:AddLabel("• Team Check + Visible Check")
+LogsGroup:AddLabel("• FOV Circle with color picker")
+LogsGroup:AddLabel("• Mouse.Hit Prediction")
+LogsGroup:AddDivider()
+LogsGroup:AddLabel("v1.1")
+LogsGroup:AddLabel("• ESP System (60 FPS optimized)")
+LogsGroup:AddLabel("• Highlight / Name / Health Bar / Trace")
+LogsGroup:AddLabel("• Team Colors mode")
+LogsGroup:AddLabel("• Config Save / Load")
+LogsGroup:AddDivider()
+LogsGroup:AddLabel("v1.2")
+LogsGroup:AddLabel("• UI Settings tab (theme + save manager)")
+LogsGroup:AddLabel("• Mouse box outline changed to slim, unfilled")
+
+-- ============ UI SETTINGS TAB ============
+local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
+MenuGroup:AddButton("Unload", function()
+    Library:Unload()
+    pcall(function() fov_circle:Remove() end)
+    pcall(function() mouse_box:Remove() end)
+    for _, p in ipairs(Players:GetPlayers()) do clearESP(p) end
+    if oldNamecall then pcall(function() hookmetamethod(game, "__namecall", oldNamecall) end) end
+    if oldIndex then pcall(function() hookmetamethod(game, "__index", oldIndex) end) end
+end)
+MenuGroup:AddLabel("Menu Bind"):AddKeyPicker("MenuKeybind", {
+    Default = "RightShift",
+    NoUI = true,
+    Text = "Menu Keybind",
+})
+Library.ToggleKeybind = Options.MenuKeybind
+
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+ThemeManager:SetFolder("SpentHub")
+SaveManager:SetFolder("SpentHub/UniversalSilentAim")
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
+SaveManager:LoadAutoloadConfig()
+
+-- ============ RENDER LOOP ============
 resume(create(function()
     RenderStepped:Connect(function()
         if Toggles.MousePosition.Value and Toggles.aim_Enabled.Value then
@@ -390,10 +697,11 @@ resume(create(function()
             fov_circle.Color = Options.Color.Value
             fov_circle.Position = getMousePosition()
         end
+        updateESP()
     end)
 end))
 
--- hooks
+-- ============ HOOKS ============
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -466,3 +774,5 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     end
     return oldIndex(self, Index)
 end))
+
+print("SPENT HUB loaded (Linoria UI + 60FPS ESP + Silent Aim).")
