@@ -4,7 +4,7 @@ if not syn or not protectgui then getgenv().protectgui = function() end end
 
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "Universal Silent Aim - Spent",
+    ClassName = "Universal Silent Aim - Averiias, Stefanuk12, xaxa",
     ToggleKey = "RightAlt",
     TeamCheck = false,
     VisibleCheck = false,
@@ -47,15 +47,10 @@ local create = coroutine.create
 local ValidTargetParts = {"Head", "HumanoidRootPart"}
 local PredictionAmount = 0.165
 
--- Light Pink Accent Color (255, 182, 193)
-local ACCENT_COLOR = Color3.fromRGB(255, 182, 193)
-local ACCENT_COLOR_DARK = Color3.fromRGB(200, 130, 140)
-local ACCENT_COLOR_LIGHT = Color3.fromRGB(255, 220, 225)
-
 local mouse_box = Drawing.new("Square")
 mouse_box.Visible = true
 mouse_box.ZIndex = 999
-mouse_box.Color = ACCENT_COLOR
+mouse_box.Color = Color3.fromRGB(255, 182, 193)
 mouse_box.Thickness = 2
 mouse_box.Size = Vector2.new(20, 20)
 mouse_box.Filled = false
@@ -68,7 +63,7 @@ fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 1
-fov_circle.Color = ACCENT_COLOR
+fov_circle.Color = Color3.fromRGB(255, 182, 193)
 
 local ExpectedArguments = {
     FindPartOnRayWithIgnoreList = {
@@ -204,9 +199,19 @@ end
 
 local function matchesClass(Player)
     local class = getClass(Player)
-    if class == "cop" and SilentAimSettings.TargetCop then return true end
-    if class == "inmate" and SilentAimSettings.TargetInmate then return true end
-    if class == "criminal" and SilentAimSettings.TargetCriminal then return true end
+
+    if class == "cop" then
+        return SilentAimSettings.TargetCop
+    end
+
+    if class == "criminal" then
+        return SilentAimSettings.TargetCriminal
+    end
+
+    if class == "inmate" then
+        return SilentAimSettings.TargetInmate
+    end
+
     return false
 end
 
@@ -243,11 +248,11 @@ local ESP_Name = true
 local ESP_Health = true
 local ESP_Trace = false
 local ESP_MaxDistance = 1500
-local ESP_HighlightColor = ACCENT_COLOR
+local ESP_HighlightColor = Color3.fromRGB(255, 182, 193)
 local ESP_NameColor = Color3.fromRGB(255, 255, 255)
 local ESP_HPColor = Color3.fromRGB(80, 255, 100)
-local ESP_TraceColor = ACCENT_COLOR
-local TARGET_LOCK_COLOR = ACCENT_COLOR
+local ESP_TraceColor = Color3.fromRGB(255, 255, 255)
+local TARGET_LOCK_COLOR = Color3.fromRGB(255, 182, 193)
 
 local espCache = {}
 local ESP_UPDATE_INTERVAL = 1 / 30
@@ -460,63 +465,17 @@ local function updateESP()
 end
 
 -- ============ LINORIA GUI ============
-local okLib, Library = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua"))()
-end)
-if not okLib or not Library then
-    warn("[SPENT HUB] Failed to load Linoria Library:", Library)
-    return
-end
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua"))()
 
-local okTM, ThemeManager = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua"))()
-end)
-if not okTM or not ThemeManager then
-    warn("[SPENT HUB] Failed to load ThemeManager:", ThemeManager)
-    ThemeManager = nil
-end
+-- Override default blue accent with light pink
+Library.AccentColor = Color3.fromRGB(255, 182, 193)
+Library.AccentColorDark = Library:GetDarkerColor(Library.AccentColor)
 
-local okSM, SaveManager = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua"))()
-end)
-if not okSM or not SaveManager then
-    warn("[SPENT HUB] Failed to load SaveManager:", SaveManager)
-    SaveManager = nil
-end
-
--- Apply Light Pink Accent via Library.Theme (Linoria-safe method)
-do
-    local theme = {
-        Accent        = ACCENT_COLOR,
-        Outline       = Color3.fromRGB(50, 50, 50),
-        Background    = Color3.fromRGB(20, 20, 20),
-        Text          = Color3.fromRGB(255, 255, 255),
-        SubText       = Color3.fromRGB(180, 180, 180),
-        Button        = Color3.fromRGB(30, 30, 30),
-        ButtonHover   = ACCENT_COLOR_DARK,
-        ButtonActive  = ACCENT_COLOR,
-        Toggle        = ACCENT_COLOR,
-        Slider        = ACCENT_COLOR,
-        Dropdown      = Color3.fromRGB(30, 30, 30),
-        DropdownHover = ACCENT_COLOR_DARK,
-        Groupbox      = Color3.fromRGB(25, 25, 25),
-        Divider       = Color3.fromRGB(50, 50, 50),
-        Tooltip       = Color3.fromRGB(20, 20, 20),
-        TooltipText   = Color3.fromRGB(255, 255, 255),
-        Image         = ACCENT_COLOR,
-        ImageRect     = ACCENT_COLOR,
-        Keybind       = ACCENT_COLOR,
-        KeybindText   = Color3.fromRGB(255, 255, 255),
-        KeybindHover  = ACCENT_COLOR_DARK,
-        KeybindActive = ACCENT_COLOR_LIGHT,
-    }
-    for k, v in pairs(theme) do
-        Library.Theme[k] = v
-    end
-end
+local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua"))()
 
 local Window = Library:CreateWindow({
-    Title = "SPENT HUB  ·  v15.2",
+    Title = "SPENT HUB  ·  v15.3",
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -596,7 +555,7 @@ TargetGroup:AddToggle("TargetCriminal", {
     Callback = function(v) SilentAimSettings.TargetCriminal = v end,
 })
 
-local PredictGroup = Tabs.Main:AddRightGroupbox("Prediction")
+local PredictGroup = Tabs.Main:AddLeftGroupbox("Prediction")
 PredictGroup:AddToggle("MouseHitPrediction", {
     Text = "Mouse.Hit Prediction",
     Default = false,
@@ -615,7 +574,6 @@ PredictGroup:AddSlider("PredictionAmount", {
     end,
 })
 
--- ============ ESP TAB ============
 local ESPMain = Tabs.ESP:AddLeftGroupbox("ESP")
 ESPMain:AddToggle("ESP_Enabled", {
     Text = "Enable ESP",
@@ -659,7 +617,6 @@ ESPElems:AddSlider("ESP_MaxDistance", {
     Callback = function(v) ESP_MaxDistance = v end,
 })
 
--- ============ VISUALS TAB ============
 local FOVGroup = Tabs.Visuals:AddLeftGroupbox("FOV Circle")
 FOVGroup:AddToggle("FOVVisible", {
     Text = "Show FOV Circle",
@@ -687,7 +644,6 @@ FOVGroup:AddToggle("ShowSilentAimTarget", {
     Callback = function(v) SilentAimSettings.ShowSilentAimTarget = v end,
 })
 
--- ============ CONFIG TAB ============
 local SaveLoadGroup = Tabs.Config:AddLeftGroupbox("Save / Load")
 SaveLoadGroup:AddInput("ConfigName", {
     Text = "File name",
@@ -714,9 +670,8 @@ else
     end
 end
 
--- ============ INFO TAB ============
 local InfoGroup = Tabs.Info:AddLeftGroupbox("Info")
-InfoGroup:AddLabel("SPENT HUB v15.2")
+InfoGroup:AddLabel("SPENT HUB v15.3")
 InfoGroup:AddLabel("Hold RMB to aim (toggle RAlt)")
 InfoGroup:AddLabel("GUI toggle: RightShift")
 InfoGroup:AddLabel("Unload: END")
@@ -725,25 +680,13 @@ InfoGroup:AddLabel("Silent Aim Core:")
 InfoGroup:AddLabel("SPENT")
 InfoGroup:AddDivider()
 InfoGroup:AddLabel("Supported methods:")
-InfoGroup:AddLabel("Raycast")
-InfoGroup:AddLabel("FindPartOnRay")
-InfoGroup:AddLabel("FindPartOnRayWithWhitelist")
-InfoGroup:AddLabel("FindPartOnRayWithIgnoreList")
-InfoGroup:AddLabel("Mouse.Hit/Target (+ prediction)")
-InfoGroup:AddDivider()
-InfoGroup:AddLabel("Filters:")
-InfoGroup:AddLabel("Team Check")
-InfoGroup:AddLabel("Visible Check")
+InfoGroup:AddLabel("Raycast / FindPartOnRay / Whitelist / IgnoreList / Mouse.Hit")
 InfoGroup:AddDivider()
 InfoGroup:AddLabel("Target Team:")
-InfoGroup:AddLabel("Inmate")
-InfoGroup:AddLabel("Cop")
-InfoGroup:AddLabel("Criminal")
+InfoGroup:AddLabel("Inmate / Cop / Criminal")
 InfoGroup:AddDivider()
-InfoGroup:AddLabel("ESP:")
+InfoGroup:AddLabel("ESP (optimized 30Hz):")
 InfoGroup:AddLabel("Highlight / Name / Health Bar / Trace")
-InfoGroup:AddLabel("Team Colors mode")
-InfoGroup:AddLabel("Optimized for low-end (30Hz)")
 
 local InfoGroup2 = Tabs.Info:AddRightGroupbox("Keybinds")
 InfoGroup2:AddLabel("RAlt    → toggle silent aim")
@@ -751,7 +694,6 @@ InfoGroup2:AddLabel("RMB     → engage aim")
 InfoGroup2:AddLabel("RShift  → show/hide hub")
 InfoGroup2:AddLabel("END     → unload")
 
--- ============ UI SETTINGS TAB ============
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
 MenuGroup:AddButton("Unload", function()
     Library:Unload()
@@ -768,23 +710,21 @@ MenuGroup:AddLabel("Menu Bind"):AddKeyPicker("MenuKeybind", {
 })
 Library.ToggleKeybind = Options.MenuKeybind
 
-if ThemeManager then
-    ThemeManager:SetLibrary(Library)
-    ThemeManager:SetFolder("SpentHub")
-    ThemeManager:BuildConfigSection(Tabs["UI Settings"])
-    ThemeManager:ApplyToTab(Tabs["UI Settings"])
-end
+-- Re-apply colors now that registry is populated
+pcall(function()
+    Library:UpdateColorsUsingRegistry()
+end)
 
-if SaveManager then
-    SaveManager:SetLibrary(Library)
-    SaveManager:IgnoreThemeSettings()
-    SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-    SaveManager:SetFolder("SpentHub/PrisonLife")
-    SaveManager:BuildConfigSection(Tabs["UI Settings"])
-    SaveManager:LoadAutoloadConfig()
-end
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+ThemeManager:SetFolder("SpentHub")
+SaveManager:SetFolder("SpentHub/PrisonLife")
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
+SaveManager:LoadAutoloadConfig()
 
--- ============ RENDER LOOP ============
 resume(create(function()
     RenderStepped:Connect(function()
         if SilentAimSettings.ShowSilentAimTarget and SilentAimSettings.Enabled then
@@ -800,7 +740,7 @@ resume(create(function()
         end
         if SilentAimSettings.FOVVisible then
             fov_circle.Visible = SilentAimSettings.FOVVisible
-            fov_circle.Color = ACCENT_COLOR
+            fov_circle.Color = Color3.fromRGB(255, 182, 193)
             fov_circle.Position = getMousePosition()
         else
             fov_circle.Visible = false
@@ -809,7 +749,6 @@ resume(create(function()
     end)
 end))
 
--- ============ HOOKS ============
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -898,4 +837,4 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
-print("SPENT HUB v15.2 loaded (Linoria + ESP) with Light Pink Accent.")
+print("SPENT HUB v15.3 loaded (pink accent).")
