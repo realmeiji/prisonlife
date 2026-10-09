@@ -460,42 +460,60 @@ local function updateESP()
 end
 
 -- ============ LINORIA GUI ============
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua"))()
+local okLib, Library = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua"))()
+end)
+if not okLib or not Library then
+    warn("[SPENT HUB] Failed to load Linoria Library:", Library)
+    return
+end
 
--- Apply Light Pink Accent to the UI Library
-Library:SetTheme({
-    Accent = ACCENT_COLOR,
-    Tab = Color3.fromRGB(18, 18, 18),
-    Outline = Color3.fromRGB(40, 40, 40),
-    Text = Color3.fromRGB(255, 255, 255),
-    SubText = Color3.fromRGB(180, 180, 180),
-    Button = Color3.fromRGB(30, 30, 30),
-    ButtonHover = ACCENT_COLOR_DARK,
-    ButtonActive = ACCENT_COLOR,
-    Toggle = Color3.fromRGB(30, 30, 30),
-    ToggleEnabled = ACCENT_COLOR,
-    Slider = Color3.fromRGB(30, 30, 30),
-    SliderBar = ACCENT_COLOR,
-    Dropdown = Color3.fromRGB(30, 30, 30),
-    DropdownOption = Color3.fromRGB(25, 25, 25),
-    DropdownHover = ACCENT_COLOR_DARK,
-    SearchBox = Color3.fromRGB(25, 25, 25),
-    SearchBoxHover = ACCENT_COLOR_DARK,
-    Groupbox = Color3.fromRGB(25, 25, 25),
-    Divider = Color3.fromRGB(50, 50, 50),
-    Tooltip = Color3.fromRGB(20, 20, 20),
-    TooltipText = Color3.fromRGB(255, 255, 255),
-    Image = ACCENT_COLOR,
-    ImageRect = ACCENT_COLOR,
-    SearchBoxText = Color3.fromRGB(255, 255, 255),
-    SearchBoxPlaceholder = Color3.fromRGB(150, 150, 150),
-    Keybind = ACCENT_COLOR,
-    KeybindText = Color3.fromRGB(255, 255, 255),
-    KeybindHover = ACCENT_COLOR_DARK,
-    KeybindActive = ACCENT_COLOR_LIGHT,
-})
+local okTM, ThemeManager = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua"))()
+end)
+if not okTM or not ThemeManager then
+    warn("[SPENT HUB] Failed to load ThemeManager:", ThemeManager)
+    ThemeManager = nil
+end
+
+local okSM, SaveManager = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua"))()
+end)
+if not okSM or not SaveManager then
+    warn("[SPENT HUB] Failed to load SaveManager:", SaveManager)
+    SaveManager = nil
+end
+
+-- Apply Light Pink Accent via Library.Theme (Linoria-safe method)
+do
+    local theme = {
+        Accent        = ACCENT_COLOR,
+        Outline       = Color3.fromRGB(50, 50, 50),
+        Background    = Color3.fromRGB(20, 20, 20),
+        Text          = Color3.fromRGB(255, 255, 255),
+        SubText       = Color3.fromRGB(180, 180, 180),
+        Button        = Color3.fromRGB(30, 30, 30),
+        ButtonHover   = ACCENT_COLOR_DARK,
+        ButtonActive  = ACCENT_COLOR,
+        Toggle        = ACCENT_COLOR,
+        Slider        = ACCENT_COLOR,
+        Dropdown      = Color3.fromRGB(30, 30, 30),
+        DropdownHover = ACCENT_COLOR_DARK,
+        Groupbox      = Color3.fromRGB(25, 25, 25),
+        Divider       = Color3.fromRGB(50, 50, 50),
+        Tooltip       = Color3.fromRGB(20, 20, 20),
+        TooltipText   = Color3.fromRGB(255, 255, 255),
+        Image         = ACCENT_COLOR,
+        ImageRect     = ACCENT_COLOR,
+        Keybind       = ACCENT_COLOR,
+        KeybindText   = Color3.fromRGB(255, 255, 255),
+        KeybindHover  = ACCENT_COLOR_DARK,
+        KeybindActive = ACCENT_COLOR_LIGHT,
+    }
+    for k, v in pairs(theme) do
+        Library.Theme[k] = v
+    end
+end
 
 local Window = Library:CreateWindow({
     Title = "SPENT HUB  ·  v15.2",
@@ -750,15 +768,21 @@ MenuGroup:AddLabel("Menu Bind"):AddKeyPicker("MenuKeybind", {
 })
 Library.ToggleKeybind = Options.MenuKeybind
 
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-ThemeManager:SetFolder("SpentHub")
-SaveManager:SetFolder("SpentHub/PrisonLife")
-SaveManager:BuildConfigSection(Tabs["UI Settings"])
-ThemeManager:ApplyToTab(Tabs["UI Settings"])
-SaveManager:LoadAutoloadConfig()
+if ThemeManager then
+    ThemeManager:SetLibrary(Library)
+    ThemeManager:SetFolder("SpentHub")
+    ThemeManager:BuildConfigSection(Tabs["UI Settings"])
+    ThemeManager:ApplyToTab(Tabs["UI Settings"])
+end
+
+if SaveManager then
+    SaveManager:SetLibrary(Library)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+    SaveManager:SetFolder("SpentHub/PrisonLife")
+    SaveManager:BuildConfigSection(Tabs["UI Settings"])
+    SaveManager:LoadAutoloadConfig()
+end
 
 -- ============ RENDER LOOP ============
 resume(create(function()
