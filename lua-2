@@ -1,0 +1,877 @@
+-- init
+if not game:IsLoaded() then game.Loaded:Wait() end
+if not syn or not protectgui then getgenv().protectgui = function() end end
+
+local SilentAimSettings = {
+    Enabled = false,
+    ClassName = "Universal Silent Aim - Averiias, Stefanuk12, xaxa",
+    ToggleKey = "RightAlt",
+    TeamCheck = false,
+    VisibleCheck = false,
+    TargetPart = "HumanoidRootPart",
+    SilentAimMethod = "Raycast",
+    FOVRadius = 130,
+    FOVVisible = false,
+    ShowSilentAimTarget = false,
+    MouseHitPrediction = false,
+    MouseHitPredictionAmount = 0.165,
+    HitChance = 100,
+    TargetInmate = true,
+    TargetCop = true,
+    TargetCriminal = true,
+}
+getgenv().SilentAimSettings = SilentAimSettings
+
+local MainFileName = "UniversalSilentAim"
+local SelectedFile, FileToSave = "", ""
+local Camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local GetChildren = game.GetChildren
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+local resume = coroutine.resume
+local create = coroutine.create
+local ValidTargetParts = {"Head", "HumanoidRootPart"}
+local PredictionAmount = 0.165
+
+-- Light Pink Accent Color (255, 182, 193)
+local ACCENT_COLOR = Color3.fromRGB(255, 182, 193)
+local ACCENT_COLOR_DARK = Color3.fromRGB(200, 130, 140)
+local ACCENT_COLOR_LIGHT = Color3.fromRGB(255, 220, 225)
+
+local mouse_box = Drawing.new("Square")
+mouse_box.Visible = true
+mouse_box.ZIndex = 999
+mouse_box.Color = ACCENT_COLOR
+mouse_box.Thickness = 2
+mouse_box.Size = Vector2.new(20, 20)
+mouse_box.Filled = false
+
+local fov_circle = Drawing.new("Circle")
+fov_circle.Thickness = 1
+fov_circle.NumSides = 100
+fov_circle.Radius = 130
+fov_circle.Filled = false
+fov_circle.Visible = false
+fov_circle.ZIndex = 999
+fov_circle.Transparency = 1
+fov_circle.Color = ACCENT_COLOR
+
+local ExpectedArguments = {
+    FindPartOnRayWithIgnoreList = {
+        ArgCountRequired = 3,
+        Args = { "Instance", "Ray", "table", "boolean", "boolean" }
+    },
+    FindPartOnRayWithWhitelist = {
+        ArgCountRequired = 3,
+        Args = { "Instance", "Ray", "table", "boolean" }
+    },
+    FindPartOnRay = {
+        ArgCountRequired = 2,
+        Args = { "Instance", "Ray", "Instance", "boolean", "boolean" }
+    },
+    Raycast = {
+        ArgCountRequired = 3,
+        Args = { "Instance", "Vector3", "Vector3", "RaycastParams" }
+    }
+}
+
+function CalculateChance(Percentage)
+    Percentage = math.floor(Percentage)
+    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
+    return chance <= Percentage / 100
+end
+
+do
+    if not isfolder(MainFileName) then makefolder(MainFileName); end
+    if not isfolder(string.format("%s/%s", MainFileName, tostring(game.PlaceId))) then
+        makefolder(string.format("%s/%s", MainFileName, tostring(game.PlaceId)))
+    end
+end
+
+local Files = listfiles(string.format("%s/%s", "UniversalSilentAim", tostring(game.PlaceId)))
+
+local function GetFiles()
+    local out = {}
+    for i = 1, #Files do
+        local file = Files[i]
+        if file:sub(-4) == '.lua' then
+            local pos = file:find('.lua', 1, true)
+            local start = pos
+            local char = file:sub(pos, pos)
+            while char ~= '/' and char ~= '\\' and char ~= '' do
+                pos = pos - 1
+                char = file:sub(pos, pos)
+            end
+            if char == '/' or char == '\\' then
+                table.insert(out, file:sub(pos + 1, start - 1))
+            end
+        end
+    end
+    return out
+end
+
+local function UpdateFile(FileName)
+    assert(FileName or FileName == "string", "oopsies");
+    writefile(string.format("%s/%s/%s.lua", MainFileName, tostring(game.PlaceId), FileName), HttpService:JSONEncode(SilentAimSettings))
+end
+
+local function LoadFile(FileName)
+    assert(FileName or FileName == "string", "oopsies");
+    local File = string.format("%s/%s/%s.lua", MainFileName, tostring(game.PlaceId), FileName)
+    local ConfigData = HttpService:JSONDecode(readfile(File))
+    for Index, Value in next, ConfigData do SilentAimSettings[Index] = Value end
+end
+
+local function getPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Camera, Vector)
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+
+local function ValidateArguments(Args, RayMethod)
+    local Matches = 0
+    if #Args < RayMethod.ArgCountRequired then return false end
+    for Pos, Argument in next, Args do
+        if typeof(Argument) == RayMethod.Args[Pos] then Matches = Matches + 1 end
+    end
+    return Matches >= RayMethod.ArgCountRequired
+end
+
+local function getDirection(Origin, Position)
+    return (Position - Origin).Unit * 1000
+end
+
+local function getMousePosition()
+    return GetMouseLocation(UserInputService)
+end
+
+local function IsPlayerVisible(Player)
+    local PlayerCharacter = Player.Character
+    local LocalPlayerCharacter = LocalPlayer.Character
+    if not (PlayerCharacter or LocalPlayerCharacter) then return end
+    local PlayerRoot = FindFirstChild(PlayerCharacter, SilentAimSettings.TargetPart) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+    if not PlayerRoot then return end
+    local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
+    local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+    return ((ObscuringObjects == 0 and true) or (ObscuringObjects > 0 and false))
+end
+
+local function getClass(Player)
+    local ok, result = pcall(function()
+        local Character = Player.Character
+        if not Character then return "unknown" end
+        local teamName = Player.Team and Player.Team.Name:lower() or ""
+        if teamName:find("guard") or teamName:find("cop") or teamName:find("officer") or teamName:find("police") then
+            return "cop"
+        elseif teamName:find("criminal") or teamName:find("inmate") or teamName:find("prisoner") then
+            local bp = Player:FindFirstChild("Backpack")
+            local hasCriminalTool = false
+            if bp then
+                for _, t in ipairs(bp:GetChildren()) do
+                    if t:IsA("Tool") and (t.Name == "Crude Knife" or t.Name == "Hammer") then
+                        hasCriminalTool = true; break
+                    end
+                end
+            end
+            if Character and not hasCriminalTool then
+                for _, t in ipairs(Character:GetChildren()) do
+                    if t:IsA("Tool") and (t.Name == "Crude Knife" or t.Name == "Hammer") then
+                        hasCriminalTool = true; break
+                    end
+                end
+            end
+            if hasCriminalTool then return "criminal" end
+            return "inmate"
+        end
+        return "unknown"
+    end)
+    if ok then return result end
+    return "unknown"
+end
+
+local function matchesClass(Player)
+    local class = getClass(Player)
+    if class == "cop" and SilentAimSettings.TargetCop then return true end
+    if class == "inmate" and SilentAimSettings.TargetInmate then return true end
+    if class == "criminal" and SilentAimSettings.TargetCriminal then return true end
+    return false
+end
+
+local function getClosestPlayer()
+    if not SilentAimSettings.TargetPart then return end
+    local Closest
+    local DistanceToMouse
+    for _, Player in next, GetPlayers(Players) do
+        if Player == LocalPlayer then continue end
+        if SilentAimSettings.TeamCheck and Player.Team == LocalPlayer.Team then continue end
+        if not matchesClass(Player) then continue end
+        local Character = Player.Character
+        if not Character then continue end
+        if SilentAimSettings.VisibleCheck and not IsPlayerVisible(Player) then continue end
+        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+        local Humanoid = FindFirstChild(Character, "Humanoid")
+        if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        if not OnScreen then continue end
+        local Distance = (getMousePosition() - ScreenPosition).Magnitude
+        if Distance <= (DistanceToMouse or SilentAimSettings.FOVRadius or 2000) then
+            Closest = ((SilentAimSettings.TargetPart == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[SilentAimSettings.TargetPart])
+            DistanceToMouse = Distance
+        end
+    end
+    return Closest
+end
+
+-- ============ ESP SYSTEM (optimized 30Hz) ============
+local ESP_Enabled = false
+local ESP_Team = false
+local ESP_Highlight = true
+local ESP_Name = true
+local ESP_Health = true
+local ESP_Trace = false
+local ESP_MaxDistance = 1500
+local ESP_HighlightColor = ACCENT_COLOR
+local ESP_NameColor = Color3.fromRGB(255, 255, 255)
+local ESP_HPColor = Color3.fromRGB(80, 255, 100)
+local ESP_TraceColor = ACCENT_COLOR
+local TARGET_LOCK_COLOR = ACCENT_COLOR
+
+local espCache = {}
+local ESP_UPDATE_INTERVAL = 1 / 30
+local HIGHLIGHT_CHECK_INTERVAL = 0.1
+local LOCK_CACHE_INTERVAL = 0.1
+local DISTANCE_CULL = 1.2
+
+local lastESPUpdate = 0
+local lastHighlightUpdate = 0
+local lastLockCheck = 0
+local cachedLockedChar = nil
+
+local function isLockedChar(char)
+    local now = tick()
+    if now - lastLockCheck >= LOCK_CACHE_INTERVAL then
+        lastLockCheck = now
+        local cur = getClosestPlayer()
+        cachedLockedChar = (cur and cur.Parent) or nil
+    end
+    return cachedLockedChar == char
+end
+
+local function getTeamColor(player)
+    local ok, color = pcall(function()
+        if player.Team and player.Team.TeamColor then
+            return player.Team.TeamColor.Color
+        end
+        local char = player.Character
+        if char then
+            local bc = char:FindFirstChildOfClass("BodyColors")
+            if bc then return bc.HeadColor3 end
+        end
+        return ESP_HighlightColor
+    end)
+    if ok and color then return color end
+    return ESP_HighlightColor
+end
+
+local function newESP(player)
+    local d = {
+        name = Drawing.new("Text"),
+        hpBack = Drawing.new("Line"),
+        hpBar = Drawing.new("Line"),
+        trace = Drawing.new("Line"),
+    }
+    d.name.Size = 13
+    d.name.Center = true
+    d.name.Outline = true
+    d.name.Color = ESP_NameColor
+    d.name.Visible = false
+
+    d.hpBack.Thickness = 3
+    d.hpBack.Color = Color3.fromRGB(30, 30, 30)
+    d.hpBack.Visible = false
+
+    d.hpBar.Thickness = 3
+    d.hpBar.Color = ESP_HPColor
+    d.hpBar.Visible = false
+
+    d.trace.Thickness = 1
+    d.trace.Color = ESP_TraceColor
+    d.trace.Visible = false
+
+    espCache[player] = d
+    return d
+end
+
+local function clearESP(player)
+    local d = espCache[player]
+    if d then
+        for key, obj in pairs(d) do
+            if key ~= "lastUpdate" and typeof(obj) == "userdata" then
+                pcall(function() obj:Remove() end)
+            end
+        end
+        espCache[player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(function(p) clearESP(p) end)
+
+local function hideESP(d)
+    if d.name.Visible then d.name.Visible = false end
+    if d.hpBack.Visible then d.hpBack.Visible = false end
+    if d.hpBar.Visible then d.hpBar.Visible = false end
+    if d.trace.Visible then d.trace.Visible = false end
+end
+
+local function updateESP()
+    local now = tick()
+    if now - lastESPUpdate < ESP_UPDATE_INTERVAL then return end
+    lastESPUpdate = now
+
+    local canUpdateHighlight = (now - lastHighlightUpdate) >= HIGHLIGHT_CHECK_INTERVAL
+    if canUpdateHighlight then lastHighlightUpdate = now end
+
+    local camPos = Camera.CFrame.Position
+    local viewport = Camera.ViewportSize
+    local centerX = viewport.X / 2
+    local viewportY = viewport.Y
+    local maxDist = ESP_MaxDistance * DISTANCE_CULL
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local d = espCache[player]
+        local char = player.Character
+
+        if not ESP_Enabled then
+            if d then hideESP(d) end
+            if canUpdateHighlight and char then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+            continue
+        end
+
+        if not char then
+            if d then hideESP(d) end
+            continue
+        end
+
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then
+            if d then hideESP(d) end
+            continue
+        end
+
+        local hrpPos = hrp.Position
+        local dist = (camPos - hrpPos).Magnitude
+        if dist > maxDist then
+            if d then hideESP(d) end
+            if canUpdateHighlight then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+            continue
+        end
+
+        if not d then d = newESP(player) end
+
+        local head = char:FindFirstChild("Head") or hrp
+        local screenHead, onScreen = WorldToViewportPoint(Camera, head.Position + Vector3.new(0, 1.5, 0))
+        if not onScreen then
+            hideESP(d)
+            continue
+        end
+
+        if ESP_Name then
+            if not d.name.Visible then d.name.Visible = true end
+            d.name.Text = player.DisplayName
+            d.name.Position = Vector2.new(screenHead.X, screenHead.Y - 20)
+            d.name.Color = ESP_NameColor
+        elseif d.name.Visible then
+            d.name.Visible = false
+        end
+
+        if ESP_Health then
+            local topY = screenHead.Y - 32
+            if not d.hpBack.Visible then d.hpBack.Visible = true end
+            if not d.hpBar.Visible then d.hpBar.Visible = true end
+            d.hpBack.From = Vector2.new(screenHead.X - 28, topY)
+            d.hpBack.To = Vector2.new(screenHead.X + 28, topY)
+            local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+            d.hpBar.From = Vector2.new(screenHead.X - 28, topY)
+            d.hpBar.To = Vector2.new(screenHead.X - 28 + 56 * pct, topY)
+            d.hpBar.Color = ESP_HPColor
+        else
+            if d.hpBack.Visible then d.hpBack.Visible = false end
+            if d.hpBar.Visible then d.hpBar.Visible = false end
+        end
+
+        if ESP_Trace then
+            if not d.trace.Visible then d.trace.Visible = true end
+            d.trace.From = Vector2.new(centerX, viewportY)
+            d.trace.To = Vector2.new(screenHead.X, screenHead.Y)
+            local tc = ESP_Team and getTeamColor(player) or ESP_TraceColor
+            if d.trace.Color ~= tc then d.trace.Color = tc end
+        elseif d.trace.Visible then
+            d.trace.Visible = false
+        end
+
+        if canUpdateHighlight then
+            if ESP_Highlight then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if not hl then
+                    hl = Instance.new("Highlight")
+                    hl.Name = "SpentHubHL"
+                    hl.Adornee = char
+                    hl.FillTransparency = 1
+                    hl.OutlineTransparency = 0
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.Parent = char
+                end
+                local wantColor
+                if isLockedChar(char) then
+                    wantColor = TARGET_LOCK_COLOR
+                elseif ESP_Team then
+                    wantColor = getTeamColor(player)
+                else
+                    wantColor = ESP_HighlightColor
+                end
+                if hl.OutlineColor ~= wantColor then hl.OutlineColor = wantColor end
+            else
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+        end
+    end
+end
+
+-- ============ LINORIA GUI ============
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua"))()
+
+-- Apply Light Pink Accent to the UI Library
+Library:SetTheme({
+    Accent = ACCENT_COLOR,
+    Tab = Color3.fromRGB(18, 18, 18),
+    Outline = Color3.fromRGB(40, 40, 40),
+    Text = Color3.fromRGB(255, 255, 255),
+    SubText = Color3.fromRGB(180, 180, 180),
+    Button = Color3.fromRGB(30, 30, 30),
+    ButtonHover = ACCENT_COLOR_DARK,
+    ButtonActive = ACCENT_COLOR,
+    Toggle = Color3.fromRGB(30, 30, 30),
+    ToggleEnabled = ACCENT_COLOR,
+    Slider = Color3.fromRGB(30, 30, 30),
+    SliderBar = ACCENT_COLOR,
+    Dropdown = Color3.fromRGB(30, 30, 30),
+    DropdownOption = Color3.fromRGB(25, 25, 25),
+    DropdownHover = ACCENT_COLOR_DARK,
+    SearchBox = Color3.fromRGB(25, 25, 25),
+    SearchBoxHover = ACCENT_COLOR_DARK,
+    Groupbox = Color3.fromRGB(25, 25, 25),
+    Divider = Color3.fromRGB(50, 50, 50),
+    Tooltip = Color3.fromRGB(20, 20, 20),
+    TooltipText = Color3.fromRGB(255, 255, 255),
+    Image = ACCENT_COLOR,
+    ImageRect = ACCENT_COLOR,
+    SearchBoxText = Color3.fromRGB(255, 255, 255),
+    SearchBoxPlaceholder = Color3.fromRGB(150, 150, 150),
+    Keybind = ACCENT_COLOR,
+    KeybindText = Color3.fromRGB(255, 255, 255),
+    KeybindHover = ACCENT_COLOR_DARK,
+    KeybindActive = ACCENT_COLOR_LIGHT,
+})
+
+local Window = Library:CreateWindow({
+    Title = "SPENT HUB  ·  v15.2",
+    Center = true,
+    AutoShow = true,
+    TabPadding = 8,
+    MenuFadeTime = 0.2,
+})
+
+local Tabs = {
+    Main = Window:AddTab("Main"),
+    ESP = Window:AddTab("ESP"),
+    Visuals = Window:AddTab("Visuals"),
+    Config = Window:AddTab("Config"),
+    Info = Window:AddTab("Info"),
+    ["UI Settings"] = Window:AddTab("UI Settings"),
+}
+
+local SilentGroup = Tabs.Main:AddLeftGroupbox("Silent Aim")
+SilentGroup:AddToggle("SilentEnabled", {
+    Text = "Enabled",
+    Default = false,
+    Tooltip = "Master silent aim toggle",
+    Callback = function(v)
+        SilentAimSettings.Enabled = v
+        mouse_box.Visible = v
+    end,
+})
+SilentGroup:AddDropdown("TargetPart", {
+    Text = "Target Part",
+    Values = { "Head", "HumanoidRootPart", "Random" },
+    Default = "HumanoidRootPart",
+    Callback = function(v) SilentAimSettings.TargetPart = v end,
+})
+SilentGroup:AddDropdown("SilentAimMethod", {
+    Text = "Method",
+    Values = { "Raycast", "FindPartOnRay", "FindPartOnRayWithWhitelist", "FindPartOnRayWithIgnoreList", "Mouse.Hit/Target" },
+    Default = "Raycast",
+    Callback = function(v) SilentAimSettings.SilentAimMethod = v end,
+})
+SilentGroup:AddSlider("HitChance", {
+    Text = "Hit Chance",
+    Default = 100,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Suffix = "%",
+    Callback = function(v) SilentAimSettings.HitChance = v end,
+})
+
+local FilterGroup = Tabs.Main:AddLeftGroupbox("Filters")
+FilterGroup:AddToggle("TeamCheck", {
+    Text = "Team Check",
+    Default = false,
+    Callback = function(v) SilentAimSettings.TeamCheck = v end,
+})
+FilterGroup:AddToggle("VisibleCheck", {
+    Text = "Visible Check",
+    Default = false,
+    Callback = function(v) SilentAimSettings.VisibleCheck = v end,
+})
+
+local TargetGroup = Tabs.Main:AddRightGroupbox("Target Team")
+TargetGroup:AddToggle("TargetInmate", {
+    Text = "Target Inmate",
+    Default = true,
+    Tooltip = "Aim only at inmates / prisoners",
+    Callback = function(v) SilentAimSettings.TargetInmate = v end,
+})
+TargetGroup:AddToggle("TargetCop", {
+    Text = "Target Cop",
+    Default = true,
+    Tooltip = "Aim only at cops / guards",
+    Callback = function(v) SilentAimSettings.TargetCop = v end,
+})
+TargetGroup:AddToggle("TargetCriminal", {
+    Text = "Target Criminal",
+    Default = true,
+    Tooltip = "Aim only at criminals holding knife/hammer",
+    Callback = function(v) SilentAimSettings.TargetCriminal = v end,
+})
+
+local PredictGroup = Tabs.Main:AddRightGroupbox("Prediction")
+PredictGroup:AddToggle("MouseHitPrediction", {
+    Text = "Mouse.Hit Prediction",
+    Default = false,
+    Callback = function(v) SilentAimSettings.MouseHitPrediction = v end,
+})
+PredictGroup:AddSlider("PredictionAmount", {
+    Text = "Prediction Amount",
+    Default = 165,
+    Min = 165,
+    Max = 1000,
+    Rounding = 0,
+    Suffix = " x1000",
+    Callback = function(v)
+        SilentAimSettings.MouseHitPredictionAmount = v / 1000
+        PredictionAmount = v / 1000
+    end,
+})
+
+-- ============ ESP TAB ============
+local ESPMain = Tabs.ESP:AddLeftGroupbox("ESP")
+ESPMain:AddToggle("ESP_Enabled", {
+    Text = "Enable ESP",
+    Default = false,
+    Callback = function(v) ESP_Enabled = v end,
+})
+ESPMain:AddToggle("ESP_Team", {
+    Text = "Team Colors",
+    Default = false,
+    Tooltip = "Highlight and trace use team colors",
+    Callback = function(v) ESP_Team = v end,
+})
+
+local ESPElems = Tabs.ESP:AddRightGroupbox("Elements")
+ESPElems:AddToggle("ESP_Highlight", {
+    Text = "Highlight",
+    Default = true,
+    Callback = function(v) ESP_Highlight = v end,
+})
+ESPElems:AddToggle("ESP_Name", {
+    Text = "Name",
+    Default = true,
+    Callback = function(v) ESP_Name = v end,
+})
+ESPElems:AddToggle("ESP_Health", {
+    Text = "Health Bar",
+    Default = true,
+    Callback = function(v) ESP_Health = v end,
+})
+ESPElems:AddToggle("ESP_Trace", {
+    Text = "Trace Line",
+    Default = false,
+    Callback = function(v) ESP_Trace = v end,
+})
+ESPElems:AddSlider("ESP_MaxDistance", {
+    Text = "Max Distance",
+    Default = 1500,
+    Min = 100,
+    Max = 3000,
+    Rounding = 0,
+    Callback = function(v) ESP_MaxDistance = v end,
+})
+
+-- ============ VISUALS TAB ============
+local FOVGroup = Tabs.Visuals:AddLeftGroupbox("FOV Circle")
+FOVGroup:AddToggle("FOVVisible", {
+    Text = "Show FOV Circle",
+    Default = false,
+    Callback = function(v)
+        SilentAimSettings.FOVVisible = v
+        fov_circle.Visible = v
+    end,
+})
+FOVGroup:AddSlider("FOVRadius", {
+    Text = "FOV Radius",
+    Default = 130,
+    Min = 0,
+    Max = 400,
+    Rounding = 0,
+    Callback = function(v)
+        SilentAimSettings.FOVRadius = v
+        fov_circle.Radius = v
+    end,
+})
+FOVGroup:AddToggle("ShowSilentAimTarget", {
+    Text = "Show Silent Aim Target",
+    Default = false,
+    Tooltip = "Box around current target",
+    Callback = function(v) SilentAimSettings.ShowSilentAimTarget = v end,
+})
+
+-- ============ CONFIG TAB ============
+local SaveLoadGroup = Tabs.Config:AddLeftGroupbox("Save / Load")
+SaveLoadGroup:AddInput("ConfigName", {
+    Text = "File name",
+    Default = "",
+    Placeholder = "Enter name...",
+    Numeric = false,
+    Finished = true,
+    Callback = function(v)
+        if v and v ~= "" then FileToSave = v end
+    end,
+})
+SaveLoadGroup:AddButton("Create Config File", function()
+    if FileToSave ~= "" then UpdateFile(FileToSave) end
+end)
+
+local ExistingGroup = Tabs.Config:AddRightGroupbox("Existing Configs")
+local files = GetFiles()
+if #files == 0 then
+    ExistingGroup:AddLabel("No configs found")
+else
+    for _, name in ipairs(files) do
+        ExistingGroup:AddButton("Load: " .. name, function() LoadFile(name) end)
+        ExistingGroup:AddButton("Save: " .. name, function() UpdateFile(name) end)
+    end
+end
+
+-- ============ INFO TAB ============
+local InfoGroup = Tabs.Info:AddLeftGroupbox("Info")
+InfoGroup:AddLabel("SPENT HUB v15.2")
+InfoGroup:AddLabel("Hold RMB to aim (toggle RAlt)")
+InfoGroup:AddLabel("GUI toggle: RightShift")
+InfoGroup:AddLabel("Unload: END")
+InfoGroup:AddDivider()
+InfoGroup:AddLabel("Silent Aim Core:")
+InfoGroup:AddLabel("SPENT")
+InfoGroup:AddDivider()
+InfoGroup:AddLabel("Supported methods:")
+InfoGroup:AddLabel("Raycast")
+InfoGroup:AddLabel("FindPartOnRay")
+InfoGroup:AddLabel("FindPartOnRayWithWhitelist")
+InfoGroup:AddLabel("FindPartOnRayWithIgnoreList")
+InfoGroup:AddLabel("Mouse.Hit/Target (+ prediction)")
+InfoGroup:AddDivider()
+InfoGroup:AddLabel("Filters:")
+InfoGroup:AddLabel("Team Check")
+InfoGroup:AddLabel("Visible Check")
+InfoGroup:AddDivider()
+InfoGroup:AddLabel("Target Team:")
+InfoGroup:AddLabel("Inmate")
+InfoGroup:AddLabel("Cop")
+InfoGroup:AddLabel("Criminal")
+InfoGroup:AddDivider()
+InfoGroup:AddLabel("ESP:")
+InfoGroup:AddLabel("Highlight / Name / Health Bar / Trace")
+InfoGroup:AddLabel("Team Colors mode")
+InfoGroup:AddLabel("Optimized for low-end (30Hz)")
+
+local InfoGroup2 = Tabs.Info:AddRightGroupbox("Keybinds")
+InfoGroup2:AddLabel("RAlt    → toggle silent aim")
+InfoGroup2:AddLabel("RMB     → engage aim")
+InfoGroup2:AddLabel("RShift  → show/hide hub")
+InfoGroup2:AddLabel("END     → unload")
+
+-- ============ UI SETTINGS TAB ============
+local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
+MenuGroup:AddButton("Unload", function()
+    Library:Unload()
+    pcall(function() fov_circle:Remove() end)
+    pcall(function() mouse_box:Remove() end)
+    for _, p in ipairs(Players:GetPlayers()) do clearESP(p) end
+    if oldNamecall then pcall(function() hookmetamethod(game, "__namecall", oldNamecall) end) end
+    if oldIndex then pcall(function() hookmetamethod(game, "__index", oldIndex) end) end
+end)
+MenuGroup:AddLabel("Menu Bind"):AddKeyPicker("MenuKeybind", {
+    Default = "RightShift",
+    NoUI = true,
+    Text = "Menu Keybind",
+})
+Library.ToggleKeybind = Options.MenuKeybind
+
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+ThemeManager:SetFolder("SpentHub")
+SaveManager:SetFolder("SpentHub/PrisonLife")
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
+SaveManager:LoadAutoloadConfig()
+
+-- ============ RENDER LOOP ============
+resume(create(function()
+    RenderStepped:Connect(function()
+        if SilentAimSettings.ShowSilentAimTarget and SilentAimSettings.Enabled then
+            if getClosestPlayer() then
+                local Root = getClosestPlayer().Parent.PrimaryPart or getClosestPlayer()
+                local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
+                mouse_box.Visible = IsOnScreen
+                mouse_box.Position = Vector2.new(RootToViewportPoint.X, RootToViewportPoint.Y)
+            else
+                mouse_box.Visible = false
+                mouse_box.Position = Vector2.new()
+            end
+        end
+        if SilentAimSettings.FOVVisible then
+            fov_circle.Visible = SilentAimSettings.FOVVisible
+            fov_circle.Color = ACCENT_COLOR
+            fov_circle.Position = getMousePosition()
+        else
+            fov_circle.Visible = false
+        end
+        updateESP()
+    end)
+end))
+
+-- ============ HOOKS ============
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
+    local Method = getnamecallmethod()
+    local Arguments = {...}
+    local self = Arguments[1]
+    local chance = CalculateChance(SilentAimSettings.HitChance)
+    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and chance == true then
+        if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
+            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
+            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
+            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
+            if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                local A_Origin = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    Arguments[3] = getDirection(A_Origin, HitPart.Position)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        end
+    end
+    return oldNamecall(...)
+end))
+
+local oldIndex = nil
+oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
+    if self == Mouse and not checkcaller() and SilentAimSettings.Enabled and SilentAimSettings.SilentAimMethod == "Mouse.Hit/Target" and getClosestPlayer() then
+        local HitPart = getClosestPlayer()
+        if Index == "Target" or Index == "target" then
+            return HitPart
+        elseif Index == "Hit" or Index == "hit" then
+            return ((SilentAimSettings.MouseHitPrediction and (HitPart.CFrame + (HitPart.Velocity * PredictionAmount))) or (not SilentAimSettings.MouseHitPrediction and HitPart.CFrame))
+        elseif Index == "X" or Index == "x" then
+            return self.X
+        elseif Index == "Y" or Index == "y" then
+            return self.Y
+        elseif Index == "UnitRay" then
+            return Ray.new(self.Origin, (self.Hit - self.Origin).Unit)
+        end
+    end
+    return oldIndex(self, Index)
+end))
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.RightAlt then
+        SilentAimSettings.Enabled = not SilentAimSettings.Enabled
+    end
+    if input.KeyCode == Enum.KeyCode.End then
+        pcall(function() fov_circle:Remove() end)
+        pcall(function() mouse_box:Remove() end)
+        for _, p in ipairs(Players:GetPlayers()) do clearESP(p) end
+        if oldNamecall then pcall(function() hookmetamethod(game, "__namecall", oldNamecall) end) end
+        if oldIndex then pcall(function() hookmetamethod(game, "__index", oldIndex) end) end
+        Library:Unload()
+    end
+end)
+
+print("SPENT HUB v15.2 loaded (Linoria + ESP) with Light Pink Accent.")
