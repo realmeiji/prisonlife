@@ -47,10 +47,14 @@ local create = coroutine.create
 local ValidTargetParts = {"Head", "HumanoidRootPart"}
 local PredictionAmount = 0.165
 
+-- accent color
+local ACCENT_PINK = Color3.fromRGB(255, 182, 193)
+local DEFAULT_COLOR = Color3.fromRGB(54, 57, 241)
+
 local mouse_box = Drawing.new("Square")
 mouse_box.Visible = true
 mouse_box.ZIndex = 999
-mouse_box.Color = Color3.fromRGB(54, 57, 241)
+mouse_box.Color = DEFAULT_COLOR
 mouse_box.Thickness = 2
 mouse_box.Size = Vector2.new(20, 20)
 mouse_box.Filled = false
@@ -63,7 +67,7 @@ fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 1
-fov_circle.Color = Color3.fromRGB(54, 57, 241)
+fov_circle.Color = DEFAULT_COLOR
 
 local ExpectedArguments = {
     FindPartOnRayWithIgnoreList = {
@@ -158,7 +162,7 @@ local function IsPlayerVisible(Player)
     local PlayerCharacter = Player.Character
     local LocalPlayerCharacter = LocalPlayer.Character
     if not (PlayerCharacter or LocalPlayerCharacter) then return end
-    local PlayerRoot = FindFirstChild(PlayerCharacter, Options.TargetPart.Value) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+    local PlayerRoot = FindFirstChild(PlayerCharacter, SilentAimSettings.TargetPart) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
     if not PlayerRoot then return end
     local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
     local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
@@ -204,12 +208,13 @@ local function matchesClass(Player)
     if class == "cop" then return SilentAimSettings.TargetCop end
     if class == "criminal" then return SilentAimSettings.TargetCriminal end
     if class == "inmate" then return SilentAimSettings.TargetInmate end
-    return false
+    -- unknown class: fall back to true so we don't lose targets when the game's team naming differs
+    return true
 end
 
--- ============ GET CLOSEST PLAYER ============
+-- ============ GET CLOSEST PLAYER (reads settings directly — no UI timing dependency) ============
 local function getClosestPlayer()
-    if not Options.TargetPart.Value then return end
+    if not SilentAimSettings.TargetPart or SilentAimSettings.TargetPart == "" then return end
     local Closest
     local DistanceToMouse
     for _, Player in next, GetPlayers(Players) do
@@ -220,15 +225,15 @@ local function getClosestPlayer()
         if not matchesClass(Player) then continue end
         local Character = Player.Character
         if not Character then continue end
-        if Toggles.VisibleCheck.Value and not IsPlayerVisible(Player) then continue end
+        if SilentAimSettings.VisibleCheck and not IsPlayerVisible(Player) then continue end
         local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
         local Humanoid = FindFirstChild(Character, "Humanoid")
         if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
         if not OnScreen then continue end
         local Distance = (getMousePosition() - ScreenPosition).Magnitude
-        if Distance <= (DistanceToMouse or Options.Radius.Value or 2000) then
-            Closest = ((Options.TargetPart.Value == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[Options.TargetPart.Value])
+        if Distance <= (DistanceToMouse or SilentAimSettings.FOVRadius or 2000) then
+            Closest = ((SilentAimSettings.TargetPart == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[SilentAimSettings.TargetPart])
             DistanceToMouse = Distance
         end
     end
@@ -243,17 +248,30 @@ local ESP_Name = true
 local ESP_Health = true
 local ESP_Trace = false
 local ESP_MaxDistance = 1500
-local ESP_HighlightColor = Color3.fromRGB(54, 57, 241)
+local ESP_HighlightColor = DEFAULT_COLOR
 local ESP_NameColor = Color3.fromRGB(255, 255, 255)
 local ESP_HPColor = Color3.fromRGB(80, 255, 100)
-local ESP_TraceColor = Color3.fromRGB(54, 57, 241)
+local ESP_TraceColor = DEFAULT_COLOR
 
 local espCache = {}
 local ESP_UPDATE_INTERVAL = 1 / 60
 local HIGHLIGHT_CHECK_INTERVAL = 0.15
+local LOCK_CACHE_INTERVAL = 0.1
 local DISTANCE_CULL = 1.2
 local lastESPUpdate = 0
 local lastHighlightUpdate = 0
+local lastLockCheck = 0
+local cachedLockedChar = nil
+
+local function isLockedChar(char)
+    local now = tick()
+    if now - lastLockCheck >= LOCK_CACHE_INTERVAL then
+        lastLockCheck = now
+        local cur = getClosestPlayer()
+        cachedLockedChar = (cur and cur.Parent) or nil
+    end
+    return cachedLockedChar == char
+end
 
 local function getTeamColor(player)
     local ok, color = pcall(function()
@@ -421,7 +439,15 @@ local function updateESP()
                     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                     hl.Parent = char
                 end
-                local wantColor = ESP_Team and getTeamColor(player) or ESP_HighlightColor
+                -- locked target = light pink, otherwise team color or default
+                local wantColor
+                if isLockedChar(char) then
+                    wantColor = ACCENT_PINK
+                elseif ESP_Team then
+                    wantColor = getTeamColor(player)
+                else
+                    wantColor = ESP_HighlightColor
+                end
                 if hl.OutlineColor ~= wantColor then hl.OutlineColor = wantColor end
             else
                 local hl = char:FindFirstChild("SpentHubHL")
@@ -510,7 +536,7 @@ end
 local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View")
 do
     local Main = FieldOfViewBOX:AddTab("Visuals")
-    Main:AddToggle("Visible", {Text = "Show FOV Circle"}):AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)}):OnChanged(function()
+    Main:AddToggle("Visible", {Text = "Show FOV Circle"}):AddColorPicker("Color", {Default = DEFAULT_COLOR}):OnChanged(function()
         fov_circle.Visible = Toggles.Visible.Value
         SilentAimSettings.FOVVisible = Toggles.Visible.Value
     end)
@@ -518,7 +544,7 @@ do
         fov_circle.Radius = Options.Radius.Value
         SilentAimSettings.FOVRadius = Options.Radius.Value
     end)
-    Main:AddToggle("MousePosition", {Text = "Show Silent Aim Target"}):AddColorPicker("MouseVisualizeColor", {Default = Color3.fromRGB(54, 57, 241)}):OnChanged(function()
+    Main:AddToggle("MousePosition", {Text = "Show Silent Aim Target"}):AddColorPicker("MouseVisualizeColor", {Default = DEFAULT_COLOR}):OnChanged(function()
         mouse_box.Visible = Toggles.MousePosition.Value
         SilentAimSettings.ShowSilentAimTarget = Toggles.MousePosition.Value
     end)
@@ -629,7 +655,8 @@ ESPElems:AddSlider("ESP_MaxDistance", {
 -- ============ VISUALS TAB ============
 local VisualGroup = Tabs.Visuals:AddLeftGroupbox("Drawing")
 VisualGroup:AddLabel("FOV Circle color and radius are configured in the Main tab → Field Of View.")
-VisualGroup:AddLabel("Silent Aim Target box color is configured in the Main tab.")
+VisualGroup:AddLabel("FOV Circle turns light pink when a target is detected.")
+VisualGroup:AddLabel("ESP Highlight turns light pink on the current silent aim target.")
 
 -- ============ UPDATE LOGS TAB ============
 local LogsGroup = Tabs.Logs:AddLeftGroupbox("Changelog")
@@ -650,6 +677,12 @@ LogsGroup:AddDivider()
 LogsGroup:AddLabel("v1.2")
 LogsGroup:AddLabel("• UI Settings tab (theme + save manager)")
 LogsGroup:AddLabel("• Mouse box outline changed to slim, unfilled")
+LogsGroup:AddDivider()
+LogsGroup:AddLabel("v1.3")
+LogsGroup:AddLabel("• Silent aim now reads settings directly (no UI timing bug)")
+LogsGroup:AddLabel("• Target Team works properly with silent aim")
+LogsGroup:AddLabel("• FOV circle turns light pink on target lock")
+LogsGroup:AddLabel("• ESP highlight turns light pink on current target")
 
 -- ============ UI SETTINGS TAB ============
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
@@ -681,9 +714,11 @@ SaveManager:LoadAutoloadConfig()
 -- ============ RENDER LOOP ============
 resume(create(function()
     RenderStepped:Connect(function()
-        if Toggles.MousePosition.Value and Toggles.aim_Enabled.Value then
-            if getClosestPlayer() then
-                local Root = getClosestPlayer().Parent.PrimaryPart or getClosestPlayer()
+        -- Mouse box follows target when Silent Aim Target toggle is on
+        if Toggles.MousePosition and Toggles.MousePosition.Value and Toggles.aim_Enabled.Value then
+            local target = getClosestPlayer()
+            if target then
+                local Root = target.Parent and target.Parent.PrimaryPart or target
                 local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
                 mouse_box.Visible = IsOnScreen
                 mouse_box.Position = Vector2.new(RootToViewportPoint.X, RootToViewportPoint.Y)
@@ -692,11 +727,21 @@ resume(create(function()
                 mouse_box.Position = Vector2.new()
             end
         end
-        if Toggles.Visible.Value then
-            fov_circle.Visible = Toggles.Visible.Value
-            fov_circle.Color = Options.Color.Value
+
+        -- FOV circle: light pink when target detected, user color otherwise
+        if Toggles.Visible and Toggles.Visible.Value then
+            fov_circle.Visible = true
+            local hasTarget = (getClosestPlayer() ~= nil)
+            if hasTarget then
+                fov_circle.Color = ACCENT_PINK
+            else
+                fov_circle.Color = Options.Color and Options.Color.Value or DEFAULT_COLOR
+            end
             fov_circle.Position = getMousePosition()
+        else
+            fov_circle.Visible = false
         end
+
         updateESP()
     end)
 end))
@@ -708,8 +753,8 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Arguments = {...}
     local self = Arguments[1]
     local chance = CalculateChance(SilentAimSettings.HitChance)
-    if Toggles.aim_Enabled.Value and self == workspace and not checkcaller() and chance == true then
-        if Method == "FindPartOnRayWithIgnoreList" and Options.Method.Value == Method then
+    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and chance == true then
+        if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
             if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
                 local A_Ray = Arguments[2]
                 local HitPart = getClosestPlayer()
@@ -720,7 +765,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                     return oldNamecall(unpack(Arguments))
                 end
             end
-        elseif Method == "FindPartOnRayWithWhitelist" and Options.Method.Value == Method then
+        elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
             if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
                 local A_Ray = Arguments[2]
                 local HitPart = getClosestPlayer()
@@ -731,7 +776,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                     return oldNamecall(unpack(Arguments))
                 end
             end
-        elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and Options.Method.Value:lower() == Method:lower() then
+        elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
             if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
                 local A_Ray = Arguments[2]
                 local HitPart = getClosestPlayer()
@@ -742,7 +787,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                     return oldNamecall(unpack(Arguments))
                 end
             end
-        elseif Method == "Raycast" and Options.Method.Value == Method then
+        elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
             if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
                 local A_Origin = Arguments[2]
                 local HitPart = getClosestPlayer()
@@ -758,12 +803,12 @@ end))
 
 local oldIndex = nil
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
-    if self == Mouse and not checkcaller() and Toggles.aim_Enabled.Value and Options.Method.Value == "Mouse.Hit/Target" and getClosestPlayer() then
+    if self == Mouse and not checkcaller() and SilentAimSettings.Enabled and SilentAimSettings.SilentAimMethod == "Mouse.Hit/Target" and getClosestPlayer() then
         local HitPart = getClosestPlayer()
         if Index == "Target" or Index == "target" then
             return HitPart
         elseif Index == "Hit" or Index == "hit" then
-            return ((Toggles.Prediction.Value and (HitPart.CFrame + (HitPart.Velocity * PredictionAmount))) or (not Toggles.Prediction.Value and HitPart.CFrame))
+            return ((SilentAimSettings.MouseHitPrediction and (HitPart.CFrame + (HitPart.Velocity * PredictionAmount))) or (not SilentAimSettings.MouseHitPrediction and HitPart.CFrame))
         elseif Index == "X" or Index == "x" then
             return self.X
         elseif Index == "Y" or Index == "y" then
@@ -774,5 +819,5 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     end
     return oldIndex(self, Index)
 end))
-
-print("SPENT HUB loaded (Linoria UI + 60FPS ESP + Silent Aim).")
+print("SPENT HUB loaded (Linoria UI + 60FPS ESP + Silent Aim + Pink Target Indicator).")
+```
