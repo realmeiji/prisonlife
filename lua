@@ -1,99 +1,34 @@
--- init if not game:IsLoaded() then game.Loaded:Wait() end if not syn or not protectgui then getgenv().protectgui = function() end end
+-- init
+if not game:IsLoaded() then game.Loaded:Wait() end
+if not syn or not protectgui then getgenv().protectgui = function() end end
 
--- ============ STARTUP NOTIFICATION ============
+-- ============ SERVICES ============
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local GuiService = game:GetService("GuiService")
+local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 
-local startupGui = Instance.new("ScreenGui")
-startupGui.Name = "SpentHubStartup"
-startupGui.ResetOnSpawn = false
-startupGui.IgnoreGuiInset = true
-startupGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-startupGui.DisplayOrder = 200
-startupGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- ============ ROBLOX NOTIFICATIONS ============
+local function robloxNotify(text, duration)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Spent Hub",
+            Text = text,
+            Duration = duration or 5
+        })
+    end)
+end
+robloxNotify("Loading. Please Wait For 5 Seconds", 5)
 
-local startupFrame = Instance.new("Frame", startupGui)
-startupFrame.Size = UDim2.new(0, 300, 0, 60)
-startupFrame.Position = UDim2.new(0.5, -150, 0, -80)
-startupFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-startupFrame.BackgroundTransparency = 0.05
-startupFrame.BorderSizePixel = 0
-Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.2, 0)
-local startupStroke = Instance.new("UIStroke", startupFrame)
-startupStroke.Color = Color3.fromRGB(255, 182, 193)
-startupStroke.Thickness = 1
-local startupGlow = Instance.new("UIStroke", startupFrame)
-startupGlow.Color = Color3.fromRGB(255, 182, 193)
-startupGlow.Thickness = 4
-startupGlow.Transparency = 0.7
-Instance.new("UICorner", startupGlow).CornerRadius = UDim.new(0.2, 0)
-
-local startupTitle = Instance.new("TextLabel", startupFrame)
-startupTitle.Size = UDim2.new(1, -20, 0, 26)
-startupTitle.Position = UDim2.new(0, 14, 0, 6)
-startupTitle.BackgroundTransparency = 1
-startupTitle.Text = "Starting Spent Hub..."
-startupTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-startupTitle.Font = Enum.Font.GothamBold
-startupTitle.TextSize = 14
-startupTitle.TextXAlignment = Enum.TextXAlignment.Left
-
-local startupSub = Instance.new("TextLabel", startupFrame)
-startupSub.Size = UDim2.new(1, -20, 0, 16)
-startupSub.Position = UDim2.new(0, 14, 0, 32)
-startupSub.BackgroundTransparency = 1
-startupSub.Text = "loading modules · please wait"
-startupSub.TextColor3 = Color3.fromRGB(180, 180, 190)
-startupSub.Font = Enum.Font.Gotham
-startupSub.TextSize = 11
-startupSub.TextXAlignment = Enum.TextXAlignment.Left
-
-local startupBar = Instance.new("Frame", startupFrame)
-startupBar.Size = UDim2.new(1, -28, 0, 3)
-startupBar.Position = UDim2.new(0, 14, 1, -8)
-startupBar.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
-startupBar.BorderSizePixel = 0
-Instance.new("UICorner", startupBar).CornerRadius = UDim.new(1, 0)
-
-local startupFill = Instance.new("Frame", startupBar)
-startupFill.Size = UDim2.new(0, 0, 1, 0)
-startupFill.BackgroundColor3 = Color3.fromRGB(255, 182, 193)
-startupFill.BorderSizePixel = 0
-Instance.new("UICorner", startupFill).CornerRadius = UDim.new(1, 0)
-
-TweenService:Create(startupFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-    Position = UDim2.new(0.5, -150, 0, 30)
-}):Play()
-TweenService:Create(startupFill, TweenInfo.new(3, Enum.EasingStyle.Linear), {
-    Size = UDim2.new(1, 0, 1, 0)
-}):Play()
-
+-- Non-blocking wait so the executor's UI doesn't hang
 task.spawn(function()
-    for _ = 1, 6 do
-        pcall(function()
-            TweenService:Create(startupGlow, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.4}):Play()
-        end)
-        task.wait(0.25)
-        pcall(function()
-            TweenService:Create(startupGlow, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.7}):Play()
-        end)
-        task.wait(0.25)
-    end
+    task.wait(5)
+    robloxNotify("Spent HUB Loaded!", 4)
 end)
-
-task.wait(3)
-
-TweenService:Create(startupFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-    Position = UDim2.new(0.5, -150, 0, -80),
-    BackgroundTransparency = 1
-}):Play()
-TweenService:Create(startupTitle, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
-TweenService:Create(startupSub, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
-TweenService:Create(startupStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-TweenService:Create(startupGlow, TweenInfo.new(0.3), {Transparency = 1}):Play()
-task.wait(0.35)
-pcall(function() startupGui:Destroy() end)
 
 -- ============ MAIN SCRIPT ============
 local SilentAimSettings = {
@@ -135,10 +70,6 @@ local RING_IDLE_COLOR   = Color3.fromRGB(255, 255, 255)
 local MainFileName = "UniversalSilentAim"
 local SelectedFile, FileToSave = "", ""
 local Camera = workspace.CurrentCamera
-local RunService = game:GetService("RunService")
-local GuiService = game:GetService("GuiService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
 local Mouse = LocalPlayer:GetMouse()
 local GetChildren = game.GetChildren
 local GetPlayers = Players.GetPlayers
@@ -193,7 +124,7 @@ local ExpectedArguments = {
 
 local lastRollTime = 0
 local lastRollResult = false
-function CalculateChance(Percentage)
+local function CalculateChance(Percentage)
     local now = tick()
     if now - lastRollTime < 0.15 then
         return lastRollResult
@@ -212,12 +143,14 @@ do
     end
 end
 
-local Files = listfiles(string.format("%s/%s", "UniversalSilentAim", tostring(game.PlaceId)))
-
 local function GetFiles()
     local out = {}
-    for i = 1, #Files do
-        local file = Files[i]
+    local ok, files = pcall(function()
+        return listfiles(string.format("%s/%s", MainFileName, tostring(game.PlaceId)))
+    end)
+    if not ok or not files then return out end
+    for i = 1, #files do
+        local file = files[i]
         if file:sub(-4) == '.lua' then
             local pos = file:find('.lua', 1, true)
             local start = pos
@@ -235,15 +168,19 @@ local function GetFiles()
 end
 
 local function UpdateFile(FileName)
-    assert(FileName or FileName == "string", "oopsies");
-    writefile(string.format("%s/%s/%s.lua", MainFileName, tostring(game.PlaceId), FileName), HttpService:JSONEncode(SilentAimSettings))
+    local ok, err = pcall(function()
+        writefile(string.format("%s/%s/%s.lua", MainFileName, tostring(game.PlaceId), FileName), HttpService:JSONEncode(SilentAimSettings))
+    end)
+    return ok, err
 end
 
 local function LoadFile(FileName)
-    assert(FileName or FileName == "string", "oopsies");
-    local File = string.format("%s/%s/%s.lua", MainFileName, tostring(game.PlaceId), FileName)
-    local ConfigData = HttpService:JSONDecode(readfile(File))
-    for Index, Value in next, ConfigData do SilentAimSettings[Index] = Value end
+    local ok, err = pcall(function()
+        local File = string.format("%s/%s/%s.lua", MainFileName, tostring(game.PlaceId), FileName)
+        local ConfigData = HttpService:JSONDecode(readfile(File))
+        for Index, Value in next, ConfigData do SilentAimSettings[Index] = Value end
+    end)
+    return ok, err
 end
 
 local function getPositionOnScreen(Vector)
@@ -271,12 +208,13 @@ end
 local function IsPlayerVisible(Player)
     local PlayerCharacter = Player.Character
     local LocalPlayerCharacter = LocalPlayer.Character
-    if not (PlayerCharacter or LocalPlayerCharacter) then return end
+    if not (PlayerCharacter and LocalPlayerCharacter) then return false end
     local PlayerRoot = FindFirstChild(PlayerCharacter, SilentAimSettings.TargetPart) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
-    if not PlayerRoot then return end
-    local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
+    if not PlayerRoot then return false end
+    local CastPoints = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}
+    local IgnoreList = {LocalPlayerCharacter, PlayerCharacter}
     local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
-    return ((ObscuringObjects == 0 and true) or (ObscuringObjects > 0 and false))
+    return ObscuringObjects == 0
 end
 
 local function getTeamColor(player)
@@ -295,7 +233,7 @@ local function getTeamColor(player)
     return Color3.fromRGB(255, 182, 193)
 end
 
--- ============ FIXED TEAM DETECTION ============
+-- ============ TEAM DETECTION ============
 local TEAM_NAMES = {
     Guard    = {"Guards", "Guard", "Police", "Cop", "Cops"},
     Inmate   = {"Inmates", "Inmate", "Prisoner", "Prisoners"},
@@ -332,9 +270,9 @@ end
 local function getHostileState(plr)
     local char = plr.Character
     if not char then return false, false end
-    local hostile = char:GetAttribute("Hostile")
-    local trespass = char:GetAttribute("Trespassing")
-    return (hostile == true), (trespass == true)
+    local ok1, hostile = pcall(function() return char:GetAttribute("Hostile") end)
+    local ok2, trespass = pcall(function() return char:GetAttribute("Trespassing") end)
+    return (ok1 and hostile == true), (ok2 and trespass == true)
 end
 
 local function matchesTeam(Player)
@@ -360,7 +298,6 @@ local function matchesTeam(Player)
 
     return false
 end
--- ============ END FIXED TEAM DETECTION ============
 
 local function getClosestPlayer()
     if not SilentAimSettings.TargetPart then return end
@@ -375,7 +312,7 @@ local function getClosestPlayer()
         if SilentAimSettings.VisibleCheck and not IsPlayerVisible(Player) then continue end
         local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
         local Humanoid = FindFirstChild(Character, "Humanoid")
-        if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+        if not HumanoidRootPart or not Humanoid or Humanoid.Health <= 0 then continue end
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
         if not OnScreen then continue end
         local Distance = (getMousePosition() - ScreenPosition).Magnitude
@@ -387,7 +324,7 @@ local function getClosestPlayer()
     return Closest
 end
 
--- ============ ESP SYSTEM (optimized) ============
+-- ============ ESP SYSTEM ============
 local espCache = {}
 
 local ESP_UPDATE_INTERVAL = 1 / 30
@@ -439,12 +376,16 @@ local function newESP(player)
     return d
 end
 
+-- FIX #1: handle both "userdata" and "table" types for Drawing objects
 local function clearESP(player)
     local d = espCache[player]
     if d then
         for key, obj in pairs(d) do
-            if key ~= "lastUpdate" and typeof(obj) == "userdata" then
-                pcall(function() obj:Remove() end)
+            if key ~= "lastUpdate" then
+                local t = typeof(obj)
+                if t == "userdata" or t == "table" then
+                    pcall(function() obj:Remove() end)
+                end
             end
         end
         espCache[player] = nil
@@ -591,7 +532,7 @@ local function updateESP()
                     hl.OutlineColor = wantColor
                 end
             else
-                local hl = char:FindFirstChild("SpentHubHL")
+                local hl = char:FindFirstChild("SpentHubHighlight")
                 if hl then hl:Destroy() end
             end
         end
@@ -703,7 +644,7 @@ local title = Instance.new("TextLabel", titleBar)
 title.Size = UDim2.new(1, -240, 1, 0)
 title.Position = UDim2.new(0, 50, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "SPENT HUB · v15.2"
+title.Text = "SPENT HUB · v15.3"
 title.TextColor3 = Theme.TEXT_STRONG
 title.Font = Enum.Font.GothamBold
 title.TextSize = 14
@@ -776,7 +717,8 @@ searchBox.Font = Enum.Font.Gotham
 searchBox.TextSize = 10
 searchBox.BorderSizePixel = 0
 searchBox.ClearTextOnFocus = false
-searchBox.ZIndex = 102Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0.4, 0)
+searchBox.ZIndex = 102
+Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0.4, 0)
 
 local sidebar = Instance.new("Frame", main)
 sidebar.Size = UDim2.new(0, 140, 1, -100)
@@ -859,8 +801,7 @@ hubToggleBtn.Size = UDim2.new(0, 46, 0, 46)
 hubToggleBtn.Position = UDim2.new(0, 26, 0.5, -23)
 hubToggleBtn.BackgroundColor3 = Theme.BG_PANEL
 hubToggleBtn.BackgroundTransparency = 0.1
-hubToggleBtn.Text = Theme.ICON
-hubToggleBtn.TextColor3 = Theme.ACCENT
+hubToggleBtn.Text = Theme.ICONhubToggleBtn.TextColor3 = Theme.ACCENT
 hubToggleBtn.Font = Enum.Font.GothamBold
 hubToggleBtn.TextSize = 24
 hubToggleBtn.BorderSizePixel = 0
@@ -895,7 +836,7 @@ hubToggleBtn.MouseLeave:Connect(function()
     }):Play()
 end)
 
--- ============ NOTIFICATIONS (upgraded) ============
+-- ============ NOTIFICATIONS ============
 local notifFrame = Instance.new("Frame", gui)
 notifFrame.Size = UDim2.new(0, 320, 0, 400)
 notifFrame.Position = UDim2.new(1, -340, 0, 110)
@@ -1231,13 +1172,13 @@ local function makeSlider(name, min, max, default, callback)
     Instance.new("UICorner", fillGlow).CornerRadius = UDim.new(1, 0)
 
     local dragging = false
-    bar.InputBegan:Connect(function(input)
+    local connInputBegan = bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
     end)
-    bar.InputEnded:Connect(function(input)
+    local connInputEnded = bar.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    local connInputChanged = UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local rel = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
             local val = math.floor(min + (max - min) * rel)
@@ -1245,6 +1186,12 @@ local function makeSlider(name, min, max, default, callback)
             lbl.Text = name .. ": " .. tostring(val)
             callback(val)
         end
+    end)
+    -- FIX: auto-cleanup when slider frame is destroyed
+    frame.Destroying:Connect(function()
+        pcall(function() connInputBegan:Disconnect() end)
+        pcall(function() connInputEnded:Disconnect() end)
+        pcall(function() connInputChanged:Disconnect() end)
     end)
 end
 
@@ -1485,8 +1432,9 @@ local function buildConfig()
     end)
     makeButton("Create Config File", function()
         if FileToSave ~= "" then
-            UpdateFile(FileToSave)
-            notify("Created: " .. FileToSave, Theme.ACCENT)
+            local ok = UpdateFile(FileToSave)
+            if ok then notify("Created: " .. FileToSave, Theme.ACCENT)
+            else notify("Create failed", Theme.TEXT_DIM) end
         end
     end)
     makeSection("EXISTING CONFIGS")
@@ -1502,8 +1450,16 @@ local function buildConfig()
         empty.TextXAlignment = Enum.TextXAlignment.Left
     else
         for _, name in ipairs(files) do
-            makeButton("Load: " .. name, function() LoadFile(name); notify("Loaded: " .. name, Theme.ACCENT) end)
-            makeButton("Save: " .. name, function() UpdateFile(name); notify("Saved: " .. name, Theme.ACCENT) end)
+            makeButton("Load: " .. name, function()
+                local ok = LoadFile(name)
+                if ok then notify("Loaded: " .. name, Theme.ACCENT)
+                else notify("Load failed: " .. name, Theme.TEXT_DIM) end
+            end)
+            makeButton("Save: " .. name, function()
+                local ok = UpdateFile(name)
+                if ok then notify("Saved: " .. name, Theme.ACCENT)
+                else notify("Save failed: " .. name, Theme.TEXT_DIM) end
+            end)
         end
     end
 end
@@ -1521,7 +1477,7 @@ local function buildInfo()
     info.TextXAlignment = Enum.TextXAlignment.Left
     info.TextYAlignment = Enum.TextYAlignment.Top
     info.Text = [[
- 거 SPENT HUB v15.2
+ 거 SPENT HUB v15.3
 
  Hold RMB to aim (toggle RAlt)
  GUI toggle: RightShift
@@ -1542,32 +1498,28 @@ local function buildInfo()
    Hostile   → Target Hostile toggle
    Trespass  → Target Trespassing toggle
 
- Team Detection Fix:
-   Handles both "Guard" and
-   "Guards" name variants.
+ Team Detection:
+   Handles Guard/Guards variants.
    Fallback to Character attributes
    Team / Role if Team object nil.
 
  Target Lock Feedback:
    FOV ring white when idle
    FOV ring light pink when locked
-   Target's ESP highlight also
-   locks to light pink
+   Target's ESP highlight locks pink
 
  ESP (optimized for low-end):
-   Runs at 30 Hz (configurable)
-   Highlight refresh at 10 Hz
-   Lock cache 100ms
+   30 Hz update, 10 Hz highlight
+   100ms lock cache
    Team Colors → highlight / trace
-                 use team colors
    Highlight / Name / Health Bar /
    Trace Line toggles
    Max Distance slider
 
  Notifications:
    Icon per type
-   Progress bar (drains over 3.2s)
-   Hover to pause timer
+   Progress bar (3.2s)
+   Hover to pause
    Click to dismiss
 
  Keybinds:
@@ -1866,10 +1818,18 @@ UserInputService.InputBegan:Connect(function(input, processed)
         if main.Visible then playClose() else playOpen() end
     end
     if input.KeyCode == Enum.KeyCode.End then
+        -- FIX #2: also remove Instance Highlights on unload
         pcall(function() gui:Destroy() end)
         pcall(function() fov_circle:Remove() end)
         pcall(function() mouse_box:Remove() end)
-        for _, p in ipairs(Players:GetPlayers()) do clearESP(p) end
+        for _, p in ipairs(Players:GetPlayers()) do
+            local char = p.Character
+            if char then
+                local hl = char:FindFirstChild("SpentHubHL")
+                if hl then hl:Destroy() end
+            end
+            clearESP(p)
+        end
         print("SPENT HUB unloaded.")
     end
 end)
@@ -1906,6 +1866,7 @@ resume(create(function()
     end)
 end))
 
+-- FIX #3: use table.unpack instead of deprecated unpack
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1919,7 +1880,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
+                    return oldNamecall(table.unpack(Arguments))
                 end
             end
         elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
@@ -1928,7 +1889,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
+                    return oldNamecall(table.unpack(Arguments))
                 end
             end
         elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
@@ -1937,7 +1898,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
+                    return oldNamecall(table.unpack(Arguments))
                 end
             end
         elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
@@ -1946,7 +1907,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     Arguments[3] = getDirection(A_Origin, HitPart.Position)
-                    return oldNamecall(unpack(Arguments))
+                    return oldNamecall(table.unpack(Arguments))
                 end
             end
         end
@@ -1977,8 +1938,4 @@ selectTab("main")
 main.Visible = true
 shadow.Visible = true
 openState = "open"
-notify("SPENT HUB v15.2 loaded", Theme.ACCENT)
-task.delay(0.4, function()
-    notify("RMB aim · RAlt toggle · RShift GUI", Theme.TEXT_DIM)
-end)
-print("SPENT HUB v15.2 loaded.")
+print("SPENT HUB v15.3 loaded.")
