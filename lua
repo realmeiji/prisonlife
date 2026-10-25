@@ -376,7 +376,6 @@ local function newESP(player)
     return d
 end
 
--- FIX #1: handle both "userdata" and "table" types for Drawing objects
 local function clearESP(player)
     local d = espCache[player]
     if d then
@@ -539,15 +538,18 @@ local function updateESP()
     end
 end
 
--- ============ SPENT HUB GUI ============
+-- ============ SPENT HUB GUI (MODERNIZED) ============
 local Theme = {
     ACCENT = Color3.fromRGB(255, 182, 193),
     ACCENT2 = Color3.fromRGB(200, 140, 200),
+    ACCENT3 = Color3.fromRGB(255, 140, 180),
     BG_MAIN = Color3.fromRGB(15, 15, 18),
     BG_PANEL = Color3.fromRGB(22, 22, 26),
     BG_OPT = Color3.fromRGB(32, 32, 38),
     BG_HOVER = Color3.fromRGB(44, 44, 52),
+    BG_GLASS = Color3.fromRGB(25, 25, 30),
     BORDER = Color3.fromRGB(58, 58, 66),
+    BORDER_GLOW = Color3.fromRGB(255, 182, 193),
     TEXT = Color3.fromRGB(240, 240, 245),
     TEXT_DIM = Color3.fromRGB(155, 155, 165),
     TEXT_STRONG = Color3.fromRGB(255, 255, 255),
@@ -562,37 +564,41 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 100
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+-- Enhanced shadow with blur effect simulation
 local shadow = Instance.new("Frame", gui)
 shadow.Size = UDim2.new(0, 750, 0, 450)
 shadow.Position = UDim2.new(0.5, -375, 0.5, -225)
 shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-shadow.BackgroundTransparency = 0.7
+shadow.BackgroundTransparency = 0.75
 shadow.BorderSizePixel = 0
 shadow.ZIndex = 99
 Instance.new("UICorner", shadow).CornerRadius = UDim.new(0.02, 0)
 
+-- Main glass panel
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 740, 0, 440)
 main.Position = UDim2.new(0.5, -370, 0.5, -220)
 main.BackgroundColor3 = Theme.BG_MAIN
-main.BackgroundTransparency = 0.03
+main.BackgroundTransparency = 0.08
 main.BorderSizePixel = 0
 main.Active = false
 main.ZIndex = 100
 Instance.new("UICorner", main).CornerRadius = UDim.new(0.02, 0)
 shadow.Position = main.Position + UDim2.new(0, -5, 0, -5)
 
+-- Dual stroke for glassmorphism effect
 local mainStroke = Instance.new("UIStroke", main)
 mainStroke.Color = Theme.BORDER
 mainStroke.Thickness = 1
-mainStroke.Transparency = 0.3
+mainStroke.Transparency = 0.5
 
 local mainGlow = Instance.new("UIStroke", main)
 mainGlow.Color = Theme.ACCENT
 mainGlow.Thickness = 3
-mainGlow.Transparency = 0.88
+mainGlow.Transparency = 0.92
 Instance.new("UICorner", mainGlow).CornerRadius = UDim.new(0.02, 0)
 
+-- Smooth position sync
 main:GetPropertyChangedSignal("Position"):Connect(function()
     shadow.Position = main.Position + UDim2.new(0, -5, 0, -5)
 end)
@@ -600,27 +606,35 @@ main:GetPropertyChangedSignal("Visible"):Connect(function()
     shadow.Visible = main.Visible
 end)
 
+-- Animated breathing glow
 task.spawn(function()
     while gui.Parent and main.Parent do
         pcall(function()
-            TweenService:Create(mainGlow, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.7}):Play()
+            TweenService:Create(mainGlow, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.65}):Play()
         end)
-        task.wait(2.4)
+        task.wait(3)
         pcall(function()
-            TweenService:Create(mainGlow, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.92}):Play()
+            TweenService:Create(mainGlow, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.92}):Play()
         end)
-        task.wait(2.4)
+        task.wait(3)
     end
 end)
 
+-- Title bar with glass effect
 local titleBar = Instance.new("Frame", main)
 titleBar.Size = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = Theme.BG_PANEL
-titleBar.BackgroundTransparency = 0.15
+titleBar.BackgroundTransparency = 0.25
 titleBar.BorderSizePixel = 0
 titleBar.ZIndex = 101
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0.035, 0)
 
+local titleStroke = Instance.new("UIStroke", titleBar)
+titleStroke.Color = Theme.BORDER
+titleStroke.Thickness = 1
+titleStroke.Transparency = 0.5
+
+-- Animated icon with pulse
 local icon = Instance.new("TextLabel", titleBar)
 icon.Size = UDim2.new(0, 34, 1, 0)
 icon.Position = UDim2.new(0, 12, 0, 0)
@@ -633,13 +647,14 @@ icon.ZIndex = 102
 
 task.spawn(function()
     while gui.Parent and icon.Parent do
-        pcall(function() TweenService:Create(icon, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {TextTransparency = 0.35}):Play() end)
-        task.wait(1.6)
-        pcall(function() TweenService:Create(icon, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {TextTransparency = 0}):Play() end)
-        task.wait(1.6)
+        pcall(function() TweenService:Create(icon, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {TextTransparency = 0.3}):Play() end)
+        task.wait(2)
+        pcall(function() TweenService:Create(icon, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {TextTransparency = 0}):Play() end)
+        task.wait(2)
     end
 end)
 
+-- Title text
 local title = Instance.new("TextLabel", titleBar)
 title.Size = UDim2.new(1, -240, 1, 0)
 title.Position = UDim2.new(0, 50, 0, 0)
@@ -651,6 +666,7 @@ title.TextSize = 14
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 102
 
+-- Draggable handle
 local drag = Instance.new("TextButton", titleBar)
 drag.Size = UDim2.new(1, -240, 1, 0)
 drag.Position = UDim2.new(0, 50, 0, 0)
@@ -661,6 +677,7 @@ drag.Draggable = true
 drag.Active = true
 drag.ZIndex = 103
 
+-- Enhanced title buttons with glow
 local function makeTitleBtn(symbol, orderX)
     local btn = Instance.new("TextButton", titleBar)
     btn.Size = UDim2.new(0, 24, 0, 24)
@@ -674,25 +691,78 @@ local function makeTitleBtn(symbol, orderX)
     btn.AutoButtonColor = false
     btn.ZIndex = 103
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0.3, 0)
+    
+    local btnStroke = Instance.new("UIStroke", btn)
+    btnStroke.Color = Theme.BORDER
+    btnStroke.Thickness = 1
+    btnStroke.Transparency = 0.6
+    
+    local btnGlow = Instance.new("UIStroke", btn)
+    btnGlow.Color = Theme.ACCENT
+    btnGlow.Thickness = 2
+    btnGlow.Transparency = 1
+    Instance.new("UICorner", btnGlow).CornerRadius = UDim.new(0.3, 0)
+    
     btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_HOVER, TextColor3 = Theme.TEXT_STRONG}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = Theme.ACCENT,
+            TextColor3 = Theme.BG_MAIN,
+            BackgroundTransparency = 0.05
+        }):Play()
+        TweenService:Create(btnGlow, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
+        TweenService:Create(btnStroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
     end)
+    
     btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_OPT, TextColor3 = Theme.TEXT}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = Theme.BG_OPT,
+            TextColor3 = Theme.TEXT,
+            BackgroundTransparency = 0.05
+        }):Play()
+        TweenService:Create(btnGlow, TweenInfo.new(0.2), {Transparency = 1}):Play()
+        TweenService:Create(btnStroke, TweenInfo.new(0.2), {Transparency = 0.6}):Play()
     end)
+    
+    -- Click ripple effect
+    btn.MouseButton1Click:Connect(function()
+        local ripple = Instance.new("Frame", btn)
+        ripple.BackgroundColor3 = Theme.ACCENT
+        ripple.BackgroundTransparency = 0.3
+        ripple.BorderSizePixel = 0
+        ripple.ZIndex = 104
+        Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
+        
+        ripple.Size = UDim2.new(0, 0, 0, 0)
+        ripple.Position = UDim2.new(0.5, 0, 0.5, 0)
+        
+        TweenService:Create(ripple, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 50, 0, 50),
+            Position = UDim2.new(0.5, -25, 0.5, -25),
+            BackgroundTransparency = 1
+        }):Play()
+        
+        game:GetService("Debris"):AddItem(ripple, 0.6)
+    end)
+    
     return btn
 end
 
 local compactBtn = makeTitleBtn("−", -90)
 local closeBtn = makeTitleBtn("×", -58)
 
+-- Status bar with enhanced styling
 local statusStrip = Instance.new("Frame", main)
 statusStrip.Size = UDim2.new(1, 0, 0, 24)
 statusStrip.Position = UDim2.new(0, 0, 0, 38)
 statusStrip.BackgroundColor3 = Theme.BG_PANEL
-statusStrip.BackgroundTransparency = 0.4
+statusStrip.BackgroundTransparency = 0.5
 statusStrip.BorderSizePixel = 0
 statusStrip.ZIndex = 101
+
+local statusStroke = Instance.new("UIStroke", statusStrip)
+statusStroke.Color = Theme.BORDER
+statusStroke.Thickness = 1
+statusStroke.Transparency = 0.5
 
 local statusLabel = Instance.new("TextLabel", statusStrip)
 statusLabel.Size = UDim2.new(1, -260, 1, 0)
@@ -705,6 +775,7 @@ statusLabel.TextSize = 10
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.ZIndex = 102
 
+-- Enhanced search box
 local searchBox = Instance.new("TextBox", statusStrip)
 searchBox.Size = UDim2.new(0, 220, 0, 16)
 searchBox.Position = UDim2.new(1, -236, 0.5, -8)
@@ -720,14 +791,37 @@ searchBox.ClearTextOnFocus = false
 searchBox.ZIndex = 102
 Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0.4, 0)
 
+local searchStroke = Instance.new("UIStroke", searchBox)
+searchStroke.Color = Theme.BORDER
+searchStroke.Thickness = 1
+searchStroke.Transparency = 0.6
+
+searchBox.MouseEnter:Connect(function()
+    TweenService:Create(searchBox, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+    TweenService:Create(searchStroke, TweenInfo.new(0.15), {Color = Theme.ACCENT, Transparency = 0.2}):Play()
+end)
+
+searchBox.MouseLeave:Connect(function()
+    if searchBox:IsFocused() then return end
+    TweenService:Create(searchBox, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play()
+    TweenService:Create(searchStroke, TweenInfo.new(0.15), {Color = Theme.BORDER, Transparency = 0.6}):Play()
+end)
+
+-- Sidebar with subtle glow
 local sidebar = Instance.new("Frame", main)
 sidebar.Size = UDim2.new(0, 140, 1, -100)
 sidebar.Position = UDim2.new(0, 10, 0, 72)
 sidebar.BackgroundColor3 = Theme.BG_PANEL
-sidebar.BackgroundTransparency = 0.15
+sidebar.BackgroundTransparency = 0.35
 sidebar.BorderSizePixel = 0
 sidebar.ZIndex = 101
 Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0.05, 0)
+
+local sidebarStroke = Instance.new("UIStroke", sidebar)
+sidebarStroke.Color = Theme.BORDER
+sidebarStroke.Thickness = 1
+sidebarStroke.Transparency = 0.5
+
 local sidebarLayout = Instance.new("UIListLayout", sidebar)
 sidebarLayout.Padding = UDim.new(0, 5)
 sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -736,19 +830,22 @@ sidebarPad.PaddingTop = UDim.new(0, 8)
 sidebarPad.PaddingLeft = UDim.new(0, 8)
 sidebarPad.PaddingRight = UDim.new(0, 8)
 
+-- Content panel
 local content = Instance.new("Frame", main)
 content.Size = UDim2.new(1, -168, 1, -100)
 content.Position = UDim2.new(0, 158, 0, 72)
 content.BackgroundColor3 = Theme.BG_PANEL
-content.BackgroundTransparency = 0.05
+content.BackgroundTransparency = 0.25
 content.BorderSizePixel = 0
 content.ZIndex = 101
 Instance.new("UICorner", content).CornerRadius = UDim.new(0.035, 0)
+
 local contentStroke = Instance.new("UIStroke", content)
 contentStroke.Color = Theme.BORDER
 contentStroke.Thickness = 1
-contentStroke.Transparency = 0.4
+contentStroke.Transparency = 0.5
 
+-- Animated gradient accent line
 local accentLine = Instance.new("Frame", content)
 accentLine.Size = UDim2.new(0, 60, 0, 2)
 accentLine.Position = UDim2.new(0, 14, 0, 34)
@@ -756,18 +853,26 @@ accentLine.BackgroundColor3 = Theme.ACCENT
 accentLine.BorderSizePixel = 0
 accentLine.ZIndex = 102
 Instance.new("UICorner", accentLine).CornerRadius = UDim.new(1, 0)
+
 local accentGradient = Instance.new("UIGradient", accentLine)
 accentGradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, Theme.ACCENT),
     ColorSequenceKeypoint.new(1, Theme.ACCENT2),
 })
 
+local accentGlow = Instance.new("UIStroke", accentLine)
+accentGlow.Color = Theme.ACCENT
+accentGlow.Thickness = 2
+accentGlow.Transparency = 0.5
+Instance.new("UICorner", accentGlow).CornerRadius = UDim.new(1, 0)
+
 local function animateAccentLine()
     accentLine.Size = UDim2.new(0, 0, 0, 2)
     accentLine.BackgroundTransparency = 0
-    TweenService:Create(accentLine, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 60, 0, 2)}):Play()
+    TweenService:Create(accentLine, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 60, 0, 2)}):Play()
 end
 
+-- Content header
 local contentHeader = Instance.new("TextLabel", content)
 contentHeader.Size = UDim2.new(1, -20, 0, 26)
 contentHeader.Position = UDim2.new(0, 14, 0, 6)
@@ -779,13 +884,14 @@ contentHeader.TextSize = 11
 contentHeader.TextXAlignment = Enum.TextXAlignment.Left
 contentHeader.ZIndex = 102
 
+-- Smooth scrolling frame
 local scroll = Instance.new("ScrollingFrame", content)
 scroll.Size = UDim2.new(1, -18, 1, -42)
 scroll.Position = UDim2.new(0, 10, 0, 36)
 scroll.BackgroundTransparency = 1
 scroll.BorderSizePixel = 0
 scroll.ScrollBarThickness = 3
-scroll.ScrollBarImageColor3 = Theme.BORDER
+scroll.ScrollBarImageColor3 = Theme.ACCENT
 scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scroll.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -796,12 +902,14 @@ local scrollLayout = Instance.new("UIListLayout", scroll)
 scrollLayout.Padding = UDim.new(0, 6)
 scrollLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
+-- Floating toggle button with enhanced glow
 local hubToggleBtn = Instance.new("TextButton", gui)
 hubToggleBtn.Size = UDim2.new(0, 46, 0, 46)
 hubToggleBtn.Position = UDim2.new(0, 26, 0.5, -23)
 hubToggleBtn.BackgroundColor3 = Theme.BG_PANEL
-hubToggleBtn.BackgroundTransparency = 0.1
-hubToggleBtn.Text = Theme.ICONhubToggleBtn.TextColor3 = Theme.ACCENT
+hubToggleBtn.BackgroundTransparency = 0.15
+hubToggleBtn.Text = Theme.ICON
+hubToggleBtn.TextColor3 = Theme.ACCENT
 hubToggleBtn.Font = Enum.Font.GothamBold
 hubToggleBtn.TextSize = 24
 hubToggleBtn.BorderSizePixel = 0
@@ -810,33 +918,41 @@ hubToggleBtn.Active = true
 hubToggleBtn.Draggable = true
 hubToggleBtn.ZIndex = 50
 Instance.new("UICorner", hubToggleBtn).CornerRadius = UDim.new(1, 0)
+
 local hubStroke = Instance.new("UIStroke", hubToggleBtn)
 hubStroke.Color = Theme.BORDER
 hubStroke.Thickness = 1
+
 local hubGlow = Instance.new("UIStroke", hubToggleBtn)
 hubGlow.Color = Theme.ACCENT
 hubGlow.Thickness = 4
-hubGlow.Transparency = 0.9
+hubGlow.Transparency = 0.85
 Instance.new("UICorner", hubGlow).CornerRadius = UDim.new(1, 0)
 
+-- Floating button hover with scale and glow
 hubToggleBtn.MouseEnter:Connect(function()
-    TweenService:Create(hubToggleBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {
+    TweenService:Create(hubToggleBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
         BackgroundColor3 = Theme.ACCENT,
         TextColor3 = Color3.fromRGB(15, 15, 18),
-        Size = UDim2.new(0, 50, 0, 50),
-        Position = UDim2.new(0, 24, 0.5, -25)
+        BackgroundTransparency = 0,
+        Size = UDim2.new(0, 52, 0, 52),
+        Position = UDim2.new(0, 23, 0.5, -26)
     }):Play()
+    TweenService:Create(hubGlow, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
 end)
+
 hubToggleBtn.MouseLeave:Connect(function()
-    TweenService:Create(hubToggleBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {
+    TweenService:Create(hubToggleBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
         BackgroundColor3 = Theme.BG_PANEL,
         TextColor3 = Theme.ACCENT,
+        BackgroundTransparency = 0.15,
         Size = UDim2.new(0, 46, 0, 46),
         Position = UDim2.new(0, 26, 0.5, -23)
     }):Play()
+    TweenService:Create(hubGlow, TweenInfo.new(0.2), {Transparency = 0.85}):Play()
 end)
 
--- ============ NOTIFICATIONS ============
+-- ============ NOTIFICATIONS (ENHANCED) ============
 local notifFrame = Instance.new("Frame", gui)
 notifFrame.Size = UDim2.new(0, 320, 0, 400)
 notifFrame.Position = UDim2.new(1, -340, 0, 110)
@@ -887,54 +1003,65 @@ local function notify(text, color)
         local lastTick = tick()
 
         local wrap = Instance.new("Frame", notifFrame)
-        wrap.Size = UDim2.new(1, 0, 0, 44)
+        wrap.Size = UDim2.new(1, 0, 0, 48)
         wrap.BackgroundTransparency = 1
         wrap.ZIndex = 501
 
+        -- Shadow with glow
         local shadowCard = Instance.new("Frame", wrap)
         shadowCard.Size = UDim2.new(1, 0, 1, 0)
         shadowCard.Position = UDim2.new(0, 2, 0, 2)
         shadowCard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        shadowCard.BackgroundTransparency = 0.6
+        shadowCard.BackgroundTransparency = 0.5
         shadowCard.BorderSizePixel = 0
         shadowCard.ZIndex = 501
         Instance.new("UICorner", shadowCard).CornerRadius = UDim.new(0.15, 0)
 
+        -- Glass card
         local card = Instance.new("Frame", wrap)
         card.Size = UDim2.new(1, 0, 1, 0)
         card.BackgroundColor3 = Theme.BG_OPT
-        card.BackgroundTransparency = 0.05
+        card.BackgroundTransparency = 0.1
         card.BorderSizePixel = 0
         card.ZIndex = 502
         Instance.new("UICorner", card).CornerRadius = UDim.new(0.15, 0)
 
+        -- Glow border
         local stroke = Instance.new("UIStroke", card)
         stroke.Color = color
         stroke.Thickness = 1
-        stroke.Transparency = 0.3
+        stroke.Transparency = 0.2
 
         local glow = Instance.new("UIStroke", card)
         glow.Color = color
         glow.Thickness = 3
-        glow.Transparency = 0.85
+        glow.Transparency = 0.8
         Instance.new("UICorner", glow).CornerRadius = UDim.new(0.15, 0)
 
+        -- Left accent bar
         local bar = Instance.new("Frame", card)
-        bar.Size = UDim2.new(0, 3, 1, -8)
-        bar.Position = UDim2.new(0, 4, 0, 4)
+        bar.Size = UDim2.new(0, 4, 1, -10)
+        bar.Position = UDim2.new(0, 4, 0, 5)
         bar.BackgroundColor3 = color
         bar.BorderSizePixel = 0
         bar.ZIndex = 503
         Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
 
+        -- Icon with glow
         local iconCircle = Instance.new("Frame", card)
-        iconCircle.Size = UDim2.new(0, 22, 0, 22)
-        iconCircle.Position = UDim2.new(0, 12, 0.5, -11)
+        iconCircle.Size = UDim2.new(0, 26, 0, 26)
+        iconCircle.Position = UDim2.new(0, 12, 0.5, -13)
         iconCircle.BackgroundColor3 = color
-        iconCircle.BackgroundTransparency = 0.15
+        iconCircle.BackgroundTransparency = 0.2
         iconCircle.BorderSizePixel = 0
         iconCircle.ZIndex = 503
         Instance.new("UICorner", iconCircle).CornerRadius = UDim.new(1, 0)
+
+        local iconGlow = Instance.new("UIStroke", iconCircle)
+        iconGlow.Color = color
+        iconGlow.Thickness = 2
+        iconGlow.Transparency = 0.5
+        Instance.new("UICorner", iconGlow).CornerRadius = UDim.new(1, 0)
 
         local iconLabel = Instance.new("TextLabel", iconCircle)
         iconLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -942,12 +1069,13 @@ local function notify(text, color)
         iconLabel.Text = pickIcon(text)
         iconLabel.TextColor3 = Color3.fromRGB(15, 15, 18)
         iconLabel.Font = Enum.Font.GothamBold
-        iconLabel.TextSize = 13
+        iconLabel.TextSize = 14
         iconLabel.ZIndex = 504
 
+        -- Text label
         local lbl = Instance.new("TextLabel", card)
-        lbl.Size = UDim2.new(1, -50, 1, -6)
-        lbl.Position = UDim2.new(0, 42, 0, 0)
+        lbl.Size = UDim2.new(1, -54, 1, -8)
+        lbl.Position = UDim2.new(0, 46, 0, 0)
         lbl.BackgroundTransparency = 1
         lbl.Text = text
         lbl.TextColor3 = Theme.TEXT_STRONG
@@ -957,6 +1085,7 @@ local function notify(text, color)
         lbl.TextYAlignment = Enum.TextYAlignment.Center
         lbl.ZIndex = 503
 
+        -- Progress bar
         local progressTrack = Instance.new("Frame", card)
         progressTrack.Size = UDim2.new(1, -12, 0, 2)
         progressTrack.Position = UDim2.new(0, 6, 1, -5)
@@ -972,38 +1101,39 @@ local function notify(text, color)
         progressFill.ZIndex = 504
         Instance.new("UICorner", progressFill).CornerRadius = UDim.new(1, 0)
 
-        wrap.Position = UDim2.new(1.15, 0, 0, 0)
-        wrap.BackgroundTransparency = 1
+        -- Slide-in animation
+        wrap.Position = UDim2.new(1.2, 0, 0, 0)
         card.BackgroundTransparency = 1
         shadowCard.BackgroundTransparency = 1
         lbl.TextTransparency = 1
         iconLabel.TextTransparency = 1
         bar.BackgroundTransparency = 1
 
-        TweenService:Create(wrap, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0.02, 0, 0, 0)}):Play()
-        task.delay(0.2, function()
+        TweenService:Create(wrap, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0.02, 0, 0, 0)}):Play()
+        task.delay(0.25, function()
             TweenService:Create(wrap, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
         end)
-        TweenService:Create(card, TweenInfo.new(0.2), {BackgroundTransparency = 0.05}):Play()
-        TweenService:Create(shadowCard, TweenInfo.new(0.2), {BackgroundTransparency = 0.6}):Play()
-        TweenService:Create(lbl, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
-        TweenService:Create(iconLabel, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
-        TweenService:Create(bar, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
+        
+        TweenService:Create(card, TweenInfo.new(0.25), {BackgroundTransparency = 0.1}):Play()
+        TweenService:Create(shadowCard, TweenInfo.new(0.25), {BackgroundTransparency = 0.5}):Play()
+        TweenService:Create(lbl, TweenInfo.new(0.25), {TextTransparency = 0}):Play()
+        TweenService:Create(iconLabel, TweenInfo.new(0.25), {TextTransparency = 0}):Play()
+        TweenService:Create(bar, TweenInfo.new(0.25), {BackgroundTransparency = 0}):Play()
 
         local dying = false
         local function destroyNotif()
             if dying then return end
             dying = true
-            TweenService:Create(wrap, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-                Position = UDim2.new(1.15, 0, 0, 0),
+            TweenService:Create(wrap, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+                Position = UDim2.new(1.2, 0, 0, 0),
             }):Play()
-            TweenService:Create(card, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(shadowCard, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(lbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-            TweenService:Create(iconLabel, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-            TweenService:Create(bar, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(progressFill, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-            task.wait(0.25)
+            TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(shadowCard, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(lbl, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+            TweenService:Create(iconLabel, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+            TweenService:Create(bar, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(progressFill, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+            task.wait(0.35)
             pcall(function() wrap:Destroy() end)
         end
 
@@ -1015,13 +1145,14 @@ local function notify(text, color)
 
         card.MouseEnter:Connect(function()
             paused = true
-            TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
-            TweenService:Create(glow, TweenInfo.new(0.15), {Transparency = 0.6}):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0}):Play()
+            TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
         end)
+        
         card.MouseLeave:Connect(function()
             paused = false
-            TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.3}):Play()
-            TweenService:Create(glow, TweenInfo.new(0.15), {Transparency = 0.85}):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.2}):Play()
+            TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.8}):Play()
         end)
 
         task.spawn(function()
@@ -1044,6 +1175,7 @@ local function notify(text, color)
     end)
 end
 
+-- ============ ENHANCED UI COMPONENTS ============
 local function makeSection(text)
     local s = Instance.new("TextLabel", scroll)
     s.Size = UDim2.new(1, 0, 0, 18)
@@ -1055,24 +1187,26 @@ local function makeSection(text)
     s.TextXAlignment = Enum.TextXAlignment.Left
 end
 
+-- Enhanced toggle with glow and animation
 local function makeToggle(name, default, callback, tooltip)
     local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Size = UDim2.new(1, 0, 0, 32)
     btn.BackgroundColor3 = Theme.BG_OPT
-    btn.BackgroundTransparency = 0.05
+    btn.BackgroundTransparency = 0.1
     btn.Text = ""
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = false
     btn.Name = name
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0.2, 0)
+    
     local stroke = Instance.new("UIStroke", btn)
     stroke.Color = Theme.BORDER
     stroke.Thickness = 1
-    stroke.Transparency = 0.4
+    stroke.Transparency = 0.5
 
     local glow = Instance.new("UIStroke", btn)
     glow.Color = Theme.ACCENT
-    glow.Thickness = 3
+    glow.Thickness = 2
     glow.Transparency = 1
     Instance.new("UICorner", glow).CornerRadius = UDim.new(0.2, 0)
 
@@ -1086,9 +1220,10 @@ local function makeToggle(name, default, callback, tooltip)
     lbl.TextSize = 11
     lbl.TextXAlignment = Enum.TextXAlignment.Left
 
+    -- Enhanced toggle indicator
     local ind = Instance.new("Frame", btn)
-    ind.Size = UDim2.new(0, 34, 0, 16)
-    ind.Position = UDim2.new(1, -46, 0.5, -8)
+    ind.Size = UDim2.new(0, 38, 0, 18)
+    ind.Position = UDim2.new(1, -50, 0.5, -9)
     ind.BackgroundColor3 = default and Theme.ACCENT or Color3.fromRGB(48, 48, 56)
     ind.BorderSizePixel = 0
     Instance.new("UICorner", ind).CornerRadius = UDim.new(1, 0)
@@ -1096,55 +1231,86 @@ local function makeToggle(name, default, callback, tooltip)
     local indGlow = Instance.new("UIStroke", ind)
     indGlow.Color = Theme.ACCENT
     indGlow.Thickness = 2
-    indGlow.Transparency = default and 0.4 or 1
+    indGlow.Transparency = default and 0.3 or 1
     Instance.new("UICorner", indGlow).CornerRadius = UDim.new(1, 0)
 
+    -- Toggle dot
     local dot = Instance.new("Frame", ind)
-    dot.Size = UDim2.new(0, 12, 0, 12)
-    dot.Position = default and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+    dot.Size = UDim2.new(0, 14, 0, 14)
+    dot.Position = default and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
     dot.BackgroundColor3 = Color3.fromRGB(250, 250, 250)
     dot.BorderSizePixel = 0
     Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
+    local dotGlow = Instance.new("UIStroke", dot)
+    dotGlow.Color = Theme.ACCENT
+    dotGlow.Thickness = 2
+    dotGlow.Transparency = 0.8
+    Instance.new("UICorner", dotGlow).CornerRadius = UDim.new(1, 0)
+
     local state = default
     btn.MouseButton1Click:Connect(function()
         state = not state
-        TweenService:Create(dot, TweenInfo.new(0.15, Enum.EasingStyle.Quart), {Position = state and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)}):Play()
-        TweenService:Create(ind, TweenInfo.new(0.15), {BackgroundColor3 = state and Theme.ACCENT or Color3.fromRGB(48, 48, 56)}):Play()
-        TweenService:Create(indGlow, TweenInfo.new(0.15), {Transparency = state and 0.4 or 1}):Play()
-        TweenService:Create(glow, TweenInfo.new(0.18), {Transparency = state and 0.7 or 1}):Play()
+        TweenService:Create(dot, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+        }):Play()
+        TweenService:Create(ind, TweenInfo.new(0.22), {
+            BackgroundColor3 = state and Theme.ACCENT or Color3.fromRGB(48, 48, 56)
+        }):Play()
+        TweenService:Create(indGlow, TweenInfo.new(0.22), {
+            Transparency = state and 0.3 or 1
+        }):Play()
+        TweenService:Create(dotGlow, TweenInfo.new(0.22), {
+            Transparency = state and 0.3 or 1
+        }):Play()
+        TweenService:Create(glow, TweenInfo.new(0.25), {
+            Transparency = state and 0.5 or 1
+        }):Play()
         callback(state)
     end)
 
+    -- Enhanced hover effects
     btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0, BackgroundColor3 = Theme.BG_HOVER}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.1}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0,
+            BackgroundColor3 = Theme.BG_HOVER,
+            Size = UDim2.new(1, 0, 0, 34)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
         if tooltip then statusLabel.Text = "  " .. tooltip end
     end)
+    
     btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.05, BackgroundColor3 = Theme.BG_OPT}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.4}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0.1,
+            BackgroundColor3 = Theme.BG_OPT,
+            Size = UDim2.new(1, 0, 0, 32)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
         statusLabel.Text = "● idle · method: " .. SilentAimSettings.SilentAimMethod
     end)
+    
     return btn
 end
 
+-- Enhanced slider with glow and smooth animation
 local function makeSlider(name, min, max, default, callback)
     local frame = Instance.new("Frame", scroll)
-    frame.Size = UDim2.new(1, 0, 0, 42)
+    frame.Size = UDim2.new(1, 0, 0, 46)
     frame.BackgroundColor3 = Theme.BG_OPT
-    frame.BackgroundTransparency = 0.05
+    frame.BackgroundTransparency = 0.1
     frame.BorderSizePixel = 0
     frame.Name = name
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0.2, 0)
+    
     local stroke = Instance.new("UIStroke", frame)
     stroke.Color = Theme.BORDER
     stroke.Thickness = 1
-    stroke.Transparency = 0.4
+    stroke.Transparency = 0.5
 
     local lbl = Instance.new("TextLabel", frame)
     lbl.Size = UDim2.new(1, -20, 0, 16)
-    lbl.Position = UDim2.new(0, 12, 0, 2)
+    lbl.Position = UDim2.new(0, 12, 0, 4)
     lbl.BackgroundTransparency = 1
     lbl.Text = name .. ": " .. tostring(default)
     lbl.TextColor3 = Theme.TEXT
@@ -1154,10 +1320,15 @@ local function makeSlider(name, min, max, default, callback)
 
     local bar = Instance.new("Frame", frame)
     bar.Size = UDim2.new(1, -24, 0, 6)
-    bar.Position = UDim2.new(0, 12, 0, 26)
+    bar.Position = UDim2.new(0, 12, 0, 28)
     bar.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
     bar.BorderSizePixel = 0
     Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    local barStroke = Instance.new("UIStroke", bar)
+    barStroke.Color = Theme.BORDER
+    barStroke.Thickness = 1
+    barStroke.Transparency = 0.5
 
     local fill = Instance.new("Frame", bar)
     fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
@@ -1168,26 +1339,30 @@ local function makeSlider(name, min, max, default, callback)
     local fillGlow = Instance.new("UIStroke", fill)
     fillGlow.Color = Theme.ACCENT
     fillGlow.Thickness = 2
-    fillGlow.Transparency = 0.5
+    fillGlow.Transparency = 0.4
     Instance.new("UICorner", fillGlow).CornerRadius = UDim.new(1, 0)
 
     local dragging = false
     local connInputBegan = bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
     end)
     local connInputEnded = bar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
     end)
     local connInputChanged = UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local rel = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
             local val = math.floor(min + (max - min) * rel)
-            fill.Size = UDim2.new(rel, 0, 1, 0)
+            TweenService:Create(fill, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {Size = UDim2.new(rel, 0, 1, 0)}):Play()
             lbl.Text = name .. ": " .. tostring(val)
             callback(val)
         end
     end)
-    -- FIX: auto-cleanup when slider frame is destroyed
+    
     frame.Destroying:Connect(function()
         pcall(function() connInputBegan:Disconnect() end)
         pcall(function() connInputEnded:Disconnect() end)
@@ -1195,11 +1370,12 @@ local function makeSlider(name, min, max, default, callback)
     end)
 end
 
+-- Enhanced button with ripple and glow
 local function makeButton(name, callback, color)
     local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Size = UDim2.new(1, 0, 0, 32)
     btn.BackgroundColor3 = color or Theme.BG_OPT
-    btn.BackgroundTransparency = 0.05
+    btn.BackgroundTransparency = 0.1
     btn.Text = name
     btn.TextColor3 = Theme.TEXT
     btn.Font = Enum.Font.GothamMedium
@@ -1207,28 +1383,72 @@ local function makeButton(name, callback, color)
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = false
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0.2, 0)
+    
     local stroke = Instance.new("UIStroke", btn)
     stroke.Color = Theme.BORDER
     stroke.Thickness = 1
-    stroke.Transparency = 0.4
-    btn.MouseButton1Click:Connect(callback)
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_HOVER, BackgroundTransparency = 0, TextColor3 = Theme.TEXT_STRONG}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.1}):Play()
+    stroke.Transparency = 0.5
+    
+    local glow = Instance.new("UIStroke", btn)
+    glow.Color = Theme.ACCENT
+    glow.Thickness = 2
+    glow.Transparency = 1
+    Instance.new("UICorner", glow).CornerRadius = UDim.new(0.2, 0)
+    
+    btn.MouseButton1Click:Connect(function()
+        callback()
+        
+        -- Ripple effect
+        local ripple = Instance.new("Frame", btn)
+        ripple.BackgroundColor3 = Theme.ACCENT
+        ripple.BackgroundTransparency = 0.4
+        ripple.BorderSizePixel = 0
+        ripple.ZIndex = 104
+        Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
+        
+        ripple.Size = UDim2.new(0, 0, 0, 0)
+        ripple.Position = UDim2.new(0.5, 0, 0.5, 0)
+        
+        TweenService:Create(ripple, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 80, 0, 80),
+            Position = UDim2.new(0.5, -40, 0.5, -40),
+            BackgroundTransparency = 1
+        }):Play()
+        
+        game:GetService("Debris"):AddItem(ripple, 0.6)
     end)
+    
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = Theme.BG_HOVER,
+            BackgroundTransparency = 0,
+            TextColor3 = Theme.TEXT_STRONG,
+            Size = UDim2.new(1, 0, 0, 34)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+    end)
+    
     btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = color or Theme.BG_OPT, BackgroundTransparency = 0.05, TextColor3 = Theme.TEXT}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.4}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = color or Theme.BG_OPT,
+            BackgroundTransparency = 0.1,
+            TextColor3 = Theme.TEXT,
+            Size = UDim2.new(1, 0, 0, 32)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 1}):Play()
     end)
 end
 
+-- Enhanced dropdown
 local function makeDropdown(name, values, current, callback)
     local idx = 1
     for i, v in ipairs(values) do if v == current then idx = i; break end end
     local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Size = UDim2.new(1, 0, 0, 32)
     btn.BackgroundColor3 = Theme.BG_OPT
-    btn.BackgroundTransparency = 0.05
+    btn.BackgroundTransparency = 0.1
     btn.Text = name .. ": " .. values[idx]
     btn.TextColor3 = Theme.TEXT
     btn.Font = Enum.Font.GothamMedium
@@ -1236,31 +1456,54 @@ local function makeDropdown(name, values, current, callback)
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = false
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0.2, 0)
+    
     local stroke = Instance.new("UIStroke", btn)
     stroke.Color = Theme.BORDER
     stroke.Thickness = 1
-    stroke.Transparency = 0.4
+    stroke.Transparency = 0.5
+    
+    local glow = Instance.new("UIStroke", btn)
+    glow.Color = Theme.ACCENT
+    glow.Thickness = 2
+    glow.Transparency = 1
+    Instance.new("UICorner", glow).CornerRadius = UDim.new(0.2, 0)
+    
     btn.MouseButton1Click:Connect(function()
         idx = idx + 1
         if idx > #values then idx = 1 end
         btn.Text = name .. ": " .. values[idx]
         callback(values[idx])
     end)
+    
     btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_HOVER, BackgroundTransparency = 0, TextColor3 = Theme.TEXT_STRONG}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.1}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Theme.BG_HOVER,
+            BackgroundTransparency = 0,
+            TextColor3 = Theme.TEXT_STRONG,
+            Size = UDim2.new(1, 0, 0, 34)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
     end)
+    
     btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.BG_OPT, BackgroundTransparency = 0.05, TextColor3 = Theme.TEXT}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.4}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Theme.BG_OPT,
+            BackgroundTransparency = 0.1,
+            TextColor3 = Theme.TEXT,
+            Size = UDim2.new(1, 0, 0, 32)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 1}):Play()
     end)
 end
 
+-- Input box
 local function makeInput(placeholder, callback)
     local box = Instance.new("TextBox", scroll)
-    box.Size = UDim2.new(1, 0, 0, 30)
+    box.Size = UDim2.new(1, 0, 0, 32)
     box.BackgroundColor3 = Theme.BG_OPT
-    box.BackgroundTransparency = 0.05
+    box.BackgroundTransparency = 0.1
     box.PlaceholderText = placeholder
     box.Text = ""
     box.TextColor3 = Theme.TEXT
@@ -1269,13 +1512,31 @@ local function makeInput(placeholder, callback)
     box.TextSize = 11
     box.BorderSizePixel = 0
     Instance.new("UICorner", box).CornerRadius = UDim.new(0.2, 0)
+    
     local stroke = Instance.new("UIStroke", box)
     stroke.Color = Theme.BORDER
     stroke.Thickness = 1
-    stroke.Transparency = 0.4
-    box.FocusLost:Connect(function() callback(box.Text) end)
+    stroke.Transparency = 0.5
+    
+    local glow = Instance.new("UIStroke", box)
+    glow.Color = Theme.ACCENT
+    glow.Thickness = 2
+    glow.Transparency = 1
+    Instance.new("UICorner", glow).CornerRadius = UDim.new(0.2, 0)
+    
+    box.Focused:Connect(function()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
+    end)
+    
+    box.FocusLost:Connect(function()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 1}):Play()
+        callback(box.Text)
+    end)
 end
 
+-- ============ PAGE BUILDERS ============
 local currentPage = "main"
 
 local function clearScroll()
@@ -1469,7 +1730,7 @@ local function buildInfo()
     local info = Instance.new("TextLabel", scroll)
     info.Size = UDim2.new(1, 0, 0, 420)
     info.BackgroundColor3 = Theme.BG_OPT
-    info.BackgroundTransparency = 0.05
+    info.BackgroundTransparency = 0.1
     info.TextColor3 = Theme.TEXT
     info.Font = Enum.Font.Gotham
     info.TextSize = 10
@@ -1478,6 +1739,7 @@ local function buildInfo()
     info.TextYAlignment = Enum.TextYAlignment.Top
     info.Text = [[
  거 SPENT HUB v15.3
+ Modern Edition
 
  Hold RMB to aim (toggle RAlt)
  GUI toggle: RightShift
@@ -1516,11 +1778,15 @@ local function buildInfo()
    Trace Line toggles
    Max Distance slider
 
- Notifications:
-   Icon per type
-   Progress bar (3.2s)
-   Hover to pause
-   Click to dismiss
+ Modern UI Features:
+   Glassmorphism effect
+   Smooth 60fps transitions
+   Glow on hover/active states
+   Gradient accents
+   Animated toggles
+   Click ripple effects
+   Breathing idle glow
+   Slide-in notifications
 
  Keybinds:
    RAlt  → toggle silent aim
@@ -1529,8 +1795,14 @@ local function buildInfo()
    END   → unload
 ]]
     Instance.new("UICorner", info).CornerRadius = UDim.new(0.06, 0)
+    
+    local infoStroke = Instance.new("UIStroke", info)
+    infoStroke.Color = Theme.BORDER
+    infoStroke.Thickness = 1
+    infoStroke.Transparency = 0.5
 end
 
+-- ============ TAB SYSTEM (MODERNIZED) ============
 local tabs = {
     {name = "Main", page = "main", build = buildMain},
     {name = "ESP", page = "esp", build = buildESP},
@@ -1555,16 +1827,24 @@ local function selectTab(page)
     animateAccentLine()
     for _, b in ipairs(tabButtons) do
         if b.page == page then
-            TweenService:Create(b.btn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ACCENT, TextColor3 = Color3.fromRGB(15, 15, 18)}):Play()
+            TweenService:Create(b.btn, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                BackgroundColor3 = Theme.ACCENT,
+                TextColor3 = Theme.BG_MAIN,
+                BackgroundTransparency = 0
+            }):Play()
         else
-            TweenService:Create(b.btn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.BG_OPT, TextColor3 = Theme.TEXT}):Play()
+            TweenService:Create(b.btn, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                BackgroundColor3 = Theme.BG_OPT,
+                TextColor3 = Theme.TEXT,
+                BackgroundTransparency = 0.1
+            }):Play()
         end
     end
     for _, u in ipairs(tabUnderlines) do
         if u.page == page then
             u.frame.Visible = true
             u.frame.Size = UDim2.new(0, 0, 0, 2)
-            TweenService:Create(u.frame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, -16, 0, 2)}):Play()
+            TweenService:Create(u.frame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, -16, 0, 2)}):Play()
         else
             u.frame.Visible = false
         end
@@ -1576,14 +1856,14 @@ end
 
 for _, t in ipairs(tabs) do
     local holder = Instance.new("Frame", sidebar)
-    holder.Size = UDim2.new(1, 0, 0, 34)
+    holder.Size = UDim2.new(1, 0, 0, 36)
     holder.BackgroundTransparency = 1
     holder.Name = t.name
 
     local btn = Instance.new("TextButton", holder)
     btn.Size = UDim2.new(1, 0, 1, 0)
     btn.BackgroundColor3 = Theme.BG_OPT
-    btn.BackgroundTransparency = 0.05
+    btn.BackgroundTransparency = 0.1
     btn.Text = t.name
     btn.TextColor3 = Theme.TEXT
     btn.Font = Enum.Font.GothamMedium
@@ -1591,10 +1871,17 @@ for _, t in ipairs(tabs) do
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = false
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0.2, 0)
+    
     local stroke = Instance.new("UIStroke", btn)
     stroke.Color = Theme.BORDER
     stroke.Thickness = 1
-    stroke.Transparency = 0.4
+    stroke.Transparency = 0.5
+    
+    local glow = Instance.new("UIStroke", btn)
+    glow.Color = Theme.ACCENT
+    glow.Thickness = 2
+    glow.Transparency = 1
+    Instance.new("UICorner", glow).CornerRadius = UDim.new(0.2, 0)
 
     local underline = Instance.new("Frame", holder)
     underline.Size = UDim2.new(1, -16, 0, 2)
@@ -1605,13 +1892,27 @@ for _, t in ipairs(tabs) do
     Instance.new("UICorner", underline).CornerRadius = UDim.new(1, 0)
 
     btn.MouseButton1Click:Connect(function() selectTab(t.page) end)
+    
     btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0, BackgroundColor3 = Theme.BG_HOVER, TextColor3 = Theme.TEXT_STRONG}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.1}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0,
+            BackgroundColor3 = Theme.BG_HOVER,
+            TextColor3 = Theme.TEXT_STRONG,
+            Size = UDim2.new(1, 0, 1, 2)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
     end)
+    
     btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.05, BackgroundColor3 = Theme.BG_OPT, TextColor3 = Theme.TEXT}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.4}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0.1,
+            BackgroundColor3 = Theme.BG_OPT,
+            TextColor3 = Theme.TEXT,
+            Size = UDim2.new(1, 0, 1, 0)
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 1}):Play()
     end)
 
     table.insert(tabButtons, {btn = btn, page = t.page})
@@ -1633,6 +1934,7 @@ searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end)
 
+-- ============ OPEN/CLOSE ANIMATIONS (ENHANCED) ============
 local openState = "idle"
 local activeOpenTweens = {}
 local activeCloseTweens = {}
@@ -1653,6 +1955,7 @@ local hasGroupTransparency = pcall(function()
     local test = Instance.new("Frame")
     test.GroupTransparency = 0
     test:Destroy()
+    return true
 end)
 
 local function playOpen()
@@ -1664,70 +1967,70 @@ local function playOpen()
 
     main.Visible = true
     shadow.Visible = true
-    main.Size = UDim2.new(0, 740 * 0.92, 0, 440 * 0.92)
-    main.Position = baseMainPos + UDim2.new(0, 15, 0, 20)
+    main.Size = UDim2.new(0, 740 * 0.88, 0, 440 * 0.88)
+    main.Position = baseMainPos + UDim2.new(0, 18, 0, 25)
     main.BackgroundTransparency = 1
     if hasGroupTransparency then main.GroupTransparency = 1 end
     mainGlow.Transparency = 1
     mainStroke.Transparency = 1
 
-    shadow.Size = UDim2.new(0, 750 * 0.92, 0, 450 * 0.92)
+    shadow.Size = UDim2.new(0, 750 * 0.88, 0, 450 * 0.88)
     shadow.Position = main.Position + UDim2.new(0, -5, 0, -5)
     shadow.BackgroundTransparency = 1
 
     icon.TextTransparency = 1
     title.TextTransparency = 1
     for _, b in ipairs(tabButtons) do
-        b.btn.Position = UDim2.new(-0.25, 0, 0, 0)
+        b.btn.Position = UDim2.new(-0.3, 0, 0, 0)
     end
 
     if hasGroupTransparency then
-        table.insert(activeOpenTweens, TweenService:Create(main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0, BackgroundTransparency = 0.03}))
+        table.insert(activeOpenTweens, TweenService:Create(main, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0, BackgroundTransparency = 0.08}))
     else
-        table.insert(activeOpenTweens, TweenService:Create(main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.03}))
+        table.insert(activeOpenTweens, TweenService:Create(main, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.08}))
     end
-    table.insert(activeOpenTweens, TweenService:Create(mainStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 0.3}))
-    table.insert(activeOpenTweens, TweenService:Create(shadow, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.7}))
+    table.insert(activeOpenTweens, TweenService:Create(mainStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 0.5}))
+    table.insert(activeOpenTweens, TweenService:Create(shadow, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.75}))
 
-    local sizeMid = UDim2.new(0, 740 * 1.04, 0, 440 * 1.04)
-    local posMid = baseMainPos + UDim2.new(0, -740 * 0.02, 0, -440 * 0.02)
-    table.insert(activeOpenTweens, TweenService:Create(main, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = sizeMid, Position = posMid}))
+    local sizeMid = UDim2.new(0, 740 * 1.06, 0, 440 * 1.06)
+    local posMid = baseMainPos + UDim2.new(0, -740 * 0.03, 0, -440 * 0.03)
+    table.insert(activeOpenTweens, TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = sizeMid, Position = posMid}))
+    task.delay(0.3, function()
+        if openState ~= "opening" and openState ~= "open" then return end
+        TweenService:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = baseMainSize, Position = baseMainPos}):Play()
+        TweenService:Create(shadow, TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = baseShadowSize, Position = baseShadowPos}):Play()
+    end)
+
+    table.insert(activeOpenTweens, TweenService:Create(mainGlow, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Transparency = 0.25}))
     task.delay(0.24, function()
         if openState ~= "opening" and openState ~= "open" then return end
-        TweenService:Create(main, TweenInfo.new(0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = baseMainSize, Position = baseMainPos}):Play()
-        TweenService:Create(shadow, TweenInfo.new(0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = baseShadowSize, Position = baseShadowPos}):Play()
+        TweenService:Create(mainGlow, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.92}):Play()
     end)
 
-    table.insert(activeOpenTweens, TweenService:Create(mainGlow, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Transparency = 0.35}))
-    task.delay(0.18, function()
-        if openState ~= "opening" and openState ~= "open" then return end
-        TweenService:Create(mainGlow, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.88}):Play()
-    end)
-
-    table.insert(activeOpenTweens, TweenService:Create(icon, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}))
-    table.insert(activeOpenTweens, TweenService:Create(title, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}))
+    table.insert(activeOpenTweens, TweenService:Create(icon, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}))
+    table.insert(activeOpenTweens, TweenService:Create(title, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}))
 
     for i, b in ipairs(tabButtons) do
-        task.delay(0.12 + (i - 1) * 0.05, function()
+        task.delay(0.15 + (i - 1) * 0.06, function()
             if openState ~= "opening" and openState ~= "open" then return end
-            TweenService:Create(b.btn, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
+            TweenService:Create(b.btn, TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
         end)
     end
 
     if hubToggleBtn.Visible then
-        local ftw1 = TweenService:Create(hubToggleBtn, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 58, 0, 58), BackgroundTransparency = 0})
-        local ftw2 = TweenService:Create(hubToggleBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0), TextTransparency = 1, BackgroundTransparency = 1})
+        local ftw1 = TweenService:Create(hubToggleBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 60, 0, 60), BackgroundTransparency = 0})
+        local ftw2 = TweenService:Create(hubToggleBtn, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0), TextTransparency = 1, BackgroundTransparency = 1})
         ftw1:Play()
-        task.delay(0.12, function()
+        task.delay(0.15, function()
             ftw2:Play()
-            task.wait(0.2)
+            task.wait(0.25)
             pcall(function() hubToggleBtn.Visible = false end)
         end)
     end
 
     for _, tw in ipairs(activeOpenTweens) do tw:Play() end
 
-    task.delay(0.6, function()
+    task.delay(0.7, function()
         if openState == "opening" then openState = "open" end
     end)
 end
@@ -1741,61 +2044,61 @@ local function playClose()
     cancelTweens(activeCloseTweens)
 
     if hasGroupTransparency then
-        TweenService:Create(main, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0.4}):Play()
+        TweenService:Create(main, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0.5}):Play()
     end
 
-    task.delay(0.14, function()
+    task.delay(0.18, function()
         if openState ~= "closing" then return end
-        local sizeSquish = UDim2.new(0, 740 * 1.03, 0, 440 * 1.03)
-        local posSquish = main.Position + UDim2.new(0, -740 * 0.015, 0, -440 * 0.015)
-        TweenService:Create(main, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = sizeSquish, Position = posSquish}):Play()
-        task.delay(0.1, function()
+        local sizeSquish = UDim2.new(0, 740 * 1.05, 0, 440 * 1.05)
+        local posSquish = main.Position + UDim2.new(0, -740 * 0.025, 0, -440 * 0.025)
+        TweenService:Create(main, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = sizeSquish, Position = posSquish}):Play()
+        task.delay(0.12, function()
             if openState ~= "closing" then return end
-            TweenService:Create(main, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-                Size = UDim2.new(0, 740 * 0.88, 0, 440 * 0.88),
-                Position = baseMainPos + UDim2.new(0, 740 * 0.06, 0, 22),
+            TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+                Size = UDim2.new(0, 740 * 0.85, 0, 440 * 0.85),
+                Position = baseMainPos + UDim2.new(0, 740 * 0.085, 0, 25),
                 BackgroundTransparency = 1,
             }):Play()
             if hasGroupTransparency then
-                TweenService:Create(main, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {GroupTransparency = 1}):Play()
+                TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {GroupTransparency = 1}):Play()
             end
-            TweenService:Create(shadow, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-                Size = UDim2.new(0, 750 * 0.88, 0, 450 * 0.88),
+            TweenService:Create(shadow, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+                Size = UDim2.new(0, 750 * 0.85, 0, 450 * 0.85),
                 BackgroundTransparency = 1,
             }):Play()
-            TweenService:Create(mainGlow, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
-            TweenService:Create(mainStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+            TweenService:Create(mainGlow, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+            TweenService:Create(mainStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
         end)
     end)
 
-    task.delay(0.24, function()
+    task.delay(0.3, function()
         if not wasOpen then return end
         hubToggleBtn.Visible = true
         hubToggleBtn.Size = UDim2.new(0, 0, 0, 0)
         hubToggleBtn.TextTransparency = 1
         hubToggleBtn.BackgroundTransparency = 1
-        TweenService:Create(hubToggleBtn, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        TweenService:Create(hubToggleBtn, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
             Size = UDim2.new(0, 54, 0, 54),
             TextTransparency = 0,
-            BackgroundTransparency = 0.1,
+            BackgroundTransparency = 0.15,
         }):Play()
-        task.delay(0.18, function()
-            TweenService:Create(hubToggleBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 46, 0, 46)}):Play()
+        task.delay(0.22, function()
+            TweenService:Create(hubToggleBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 46, 0, 46)}):Play()
         end)
     end)
 
-    task.delay(0.44, function()
+    task.delay(0.55, function()
         if openState ~= "closing" then return end
         main.Visible = false
         shadow.Visible = false
         if hasGroupTransparency then main.GroupTransparency = 0 end
-        main.BackgroundTransparency = 0.03
+        main.BackgroundTransparency = 0.08
         main.Size = baseMainSize
         main.Position = baseMainPos
         shadow.Size = baseShadowSize
         shadow.Position = baseShadowPos
-        mainGlow.Transparency = 0.88
-        mainStroke.Transparency = 0.3
+        mainGlow.Transparency = 0.92
+        mainStroke.Transparency = 0.5
         openState = "closed"
     end)
 end
@@ -1805,7 +2108,7 @@ closeBtn.MouseButton1Click:Connect(function() playClose() end)
 
 compactBtn.MouseButton1Click:Connect(function()
     local targetSize = main.Size.Y.Offset > 40 and UDim2.new(0, 740, 0, 38) or UDim2.new(0, 740, 0, 440)
-    TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {Size = targetSize}):Play()
+    TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = targetSize}):Play()
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -1818,7 +2121,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
         if main.Visible then playClose() else playOpen() end
     end
     if input.KeyCode == Enum.KeyCode.End then
-        -- FIX #2: also remove Instance Highlights on unload
         pcall(function() gui:Destroy() end)
         pcall(function() fov_circle:Remove() end)
         pcall(function() mouse_box:Remove() end)
@@ -1866,7 +2168,6 @@ resume(create(function()
     end)
 end))
 
--- FIX #3: use table.unpack instead of deprecated unpack
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1938,4 +2239,4 @@ selectTab("main")
 main.Visible = true
 shadow.Visible = true
 openState = "open"
-print("SPENT HUB v15.3 loaded.")
+print("SPENT HUB v15.3 MODERNIZED loaded with glassmorphism and smooth animations.")
