@@ -2,7 +2,6 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
 if not syn or not protectgui then getgenv().protectgui = function() end end
 
--- ============ SERVICES ============
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -13,7 +12,6 @@ local StarterGui = game:GetService("StarterGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- ============ MAIN SCRIPT ============
 local SilentAimSettings = {
     Enabled = false,
     ClassName = "Universal Silent Aim - Averiias, Stefanuk12, xaxa",
@@ -203,7 +201,6 @@ local function getTeamColor(player)
     return Color3.fromRGB(255, 182, 193)
 end
 
--- ============ TEAM DETECTION ============
 local TEAM_NAMES = {
     Guard = {"Guards", "Guard", "Police", "Cop", "Cops"},
     Inmate = {"Inmates", "Inmate", "Prisoner", "Prisoners"},
@@ -245,17 +242,14 @@ local function getHostileState(plr)
     return (ok1 and hostile == true), (ok2 and trespass == true)
 end
 
--- FIXED: matchesTeam function now properly checks teams without using nil functions
 local function matchesTeam(Player)
     local kind = getTeamKind(Player) 
     
-    -- Base team toggles
     local teamOk = true
     if kind == "Guard" and not SilentAimSettings.TargetCop then teamOk = false end
     if kind == "Inmate" and not SilentAimSettings.TargetInmate then teamOk = false end
     if kind == "Criminal" and not SilentAimSettings.TargetCriminal then teamOk = false end
     
-    -- Hostile/Trespassing logic (Fixed nil errors)
     local flagOk = false
     local localKind = getTeamKind(LocalPlayer)
     local isLocalInmate = (localKind == "Inmate")
@@ -309,7 +303,6 @@ local function getClosestPlayer()
     return Closest
 end
 
--- ============ ESP SYSTEM ============
 local espCache = {}
 local ESP_UPDATE_INTERVAL = 1 / 30
 local HIGHLIGHT_CHECK_INTERVAL = 0.1
@@ -507,7 +500,6 @@ local function updateESP()
     end
 end
 
--- ============ SPENT HUB GUI ============
 local Theme = {
     ACCENT = Color3.fromRGB(255, 182, 193),
     ACCENT2 = Color3.fromRGB(200, 140, 200),
@@ -547,10 +539,10 @@ main.BackgroundTransparency = 0.03
 main.BorderSizePixel = 0
 main.Active = false
 main.ZIndex = 100
-main.Visible = false -- HIDDEN INITIALLY
+main.Visible = false
 Instance.new("UICorner", main).CornerRadius = UDim.new(0.02, 0)
 shadow.Position = main.Position + UDim2.new(0, -5, 0, -5)
-shadow.Visible = false -- HIDDEN INITIALLY
+shadow.Visible = false
 
 local mainStroke = Instance.new("UIStroke", main)
 mainStroke.Color = Theme.BORDER
@@ -810,7 +802,6 @@ hubToggleBtn.MouseLeave:Connect(function()
     }):Play()
 end)
 
--- ============ NOTIFICATIONS ============
 local notifFrame = Instance.new("Frame", gui)
 notifFrame.Size = UDim2.new(0, 320, 0, 400)
 notifFrame.Position = UDim2.new(1, -340, 0, 110)
@@ -1871,7 +1862,6 @@ resume(create(function()
             end
         end
         
-        -- FIXED: FOV Circle now updates properly based on toggle and radius
         if SilentAimSettings.FOVVisible then 
             fov_circle.Visible = true
             fov_circle.Position = getMousePosition()
@@ -1890,7 +1880,6 @@ resume(create(function()
     end)
 end))
 
--- SAFE SILENT AIM HOOKS
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1959,26 +1948,20 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     return oldIndex(self, Index)
 end))
 
--- ============ STARTUP SEQUENCE ============
 selectTab("main")
 
--- Ensure GUI is hidden initially
 main.Visible = false
 shadow.Visible = false
 openState = "closed"
 
--- Startup Notification 1
 notify("Loading Spent Hub. Please wait 5 seconds...", Theme.ACCENT)
 print("Spent Hub: Loading...")
 
--- 5 Second Delay Sequence
 task.spawn(function()
     task.wait(5)
     
-    -- Notification 2
     notify("Spent Hub Loaded! Have fun.", Theme.ACCENT)
     print("Spent Hub: Loaded successfully.")
     
-    -- Play the opening animation
     playOpen()
 end)
