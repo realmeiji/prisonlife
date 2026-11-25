@@ -22,7 +22,7 @@ startupFrame.Position = UDim2.new(0.5, -150, 0, -80)
 startupFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 startupFrame.BackgroundTransparency = 0.08
 startupFrame.BorderSizePixel = 0
-Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.2, 0)
+Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.1, 0)
 
 local startupStroke = Instance.new("UIStroke", startupFrame)
 startupStroke.Color = Color3.fromRGB(255, 182, 193)
@@ -1340,7 +1340,7 @@ local function loadUI()
 
     local winW, winH = computeWindowSize()
     -- 25% of the shorter window edge (user request)
-    local cornerR = math.floor(math.min(winW, winH) * 0.11)
+    local cornerR = math.floor(math.min(winW, winH) * 0.12)
     local Window = Library:CreateWindow({
         Title = "SPENT HUB",
         Footer = "SPENT HUB",
