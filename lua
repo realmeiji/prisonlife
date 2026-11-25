@@ -305,15 +305,16 @@ local ExpectedArguments = {
     Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } },
 }
 
-local lastRollTime, lastRollResult = 0, false
+-- Per-shot hitchance. No sticky cache (old 0.15s lock made low % feel like 100% on rapid fire).
+local _rng = Random.new()
 local function CalculateChance(Percentage)
-    local now = tick()
-    if now - lastRollTime < 0.15 then return lastRollResult end
-    lastRollTime = now
-    Percentage = math.floor(Percentage)
-    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
-    lastRollResult = chance <= Percentage / 100
-    return lastRollResult
+    if Percentage == nil then return true end
+    Percentage = tonumber(Percentage) or 100
+    if Percentage >= 100 then return true end
+    if Percentage <= 0 then return false end
+    -- roll in [0, 100): hit if roll < Percentage  → 30 means ~30% of shots redirect
+    local roll = _rng:NextNumber(0, 100)
+    return roll < Percentage
 end
 
 local function getPositionOnScreen(Vector)
@@ -588,6 +589,8 @@ RunService.Heartbeat:Connect(function()
     if not shootRemote then return end
     if not SilentAimSettings.Enabled or not SilentAimSettings.AutoshootEnabled then return end
     if not currentTarget or not currentTarget.Parent then return end
+    -- hitchance gate (same roll as silent aim)
+    if not CalculateChance(SilentAimSettings.HitChance) then return end
     local char = LocalPlayer.Character
     local myHumanoid = char and char:FindFirstChildOfClass("Humanoid")
     if not myHumanoid or myHumanoid.Health <= 0 then return end
@@ -1336,10 +1339,12 @@ local function loadUI()
     Library.Scheme.OutlineColor = Color3.fromRGB(28, 34, 44)
 
     local winW, winH = computeWindowSize()
+    -- 25% of the shorter window edge (user request)
+    local cornerR = math.floor(math.min(winW, winH) * 0.25)
     local Window = Library:CreateWindow({
         Title = "SPENT HUB",
-        Footer = "made by spent",
-        FooterLeft = "spent hub",
+        Footer = "SPENT HUB",
+        FooterLeft = "V1",
         FooterRight = "made by spent",
         Icon = HUB_ICON_ASSET_ID,
         NotifySide = "Right",
@@ -1349,10 +1354,42 @@ local function loadUI()
         Resizable = true,
         SidebarCompacted = true,
         ShowMobileButtons = true,
-        CornerRadius = 10,
+        CornerRadius = cornerR,
         Font = Enum.Font.Gotham,
         ToggleKeybind = Enum.KeyCode.RightShift,
     })
+
+    pcall(function()
+        Library.CornerRadius = cornerR
+        if Library.Corners then
+            for _, c in ipairs(Library.Corners) do
+                if c and c:IsA("UICorner") then
+                    c.CornerRadius = UDim.new(0, cornerR)
+                end
+            end
+        end
+    end)
+
+    -- Footer layout: left V1 · middle SPENT HUB (bold) · right made by spent
+    task.defer(function()
+        pcall(function()
+            local sg = Library.ScreenGui
+            if not sg then return end
+            for _, d in ipairs(sg:GetDescendants()) do
+                if not d:IsA("TextLabel") then continue end
+                local txt = d.Text
+                if txt == "SPENT HUB" or txt == "SPENT HUB " then
+                    d.Font = Enum.Font.GothamBold
+                    d.Text = "SPENT HUB"
+                elseif txt == "V1" then
+                    d.Font = Enum.Font.GothamMedium
+                elseif txt == "made by spent" then
+                    d.Font = Enum.Font.Gotham
+                end
+            end
+        end)
+    end)
+
 
     if workspace.CurrentCamera then
         workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
@@ -1556,10 +1593,33 @@ local function loadUI()
         if not parent then parent = Library.ScreenGui end
         if not parent then return end
 
-        -- clear prior spent info chrome
+        -- clear prior spent info chrome + hide default Info groupboxes behind dash
         pcall(function()
-            local old = parent:FindFirstChild("SpentInfoDash")
-            if old then old:Destroy() end
+            for _, name in ipairs({ "SpentInfoDash", "SpentProfileCard" }) do
+                local old = parent:FindFirstChild(name, true)
+                if old then old:Destroy() end
+            end
+            if Library.ScreenGui then
+                for _, d in ipairs(Library.ScreenGui:GetDescendants()) do
+                    if d.Name == "SpentProfileCard" or d.Name == "SpentInfoDash" then
+                        d:Destroy()
+                    end
+                end
+            end
+        end)
+        pcall(function()
+            -- hide Obsidian left/right side frames on Info so only dash shows
+            if Tabs.Info and Tabs.Info.Sides then
+                for _, side in pairs(Tabs.Info.Sides) do
+                    if typeof(side) == "Instance" then
+                        side.Visible = false
+                    elseif type(side) == "table" and side.Holder then
+                        pcall(function() side.Holder.Visible = false end)
+                    elseif type(side) == "table" and side.Frame then
+                        pcall(function() side.Frame.Visible = false end)
+                    end
+                end
+            end
         end)
 
         local ACC = Library.Scheme.AccentColor or Color3.fromRGB(255, 182, 193)
@@ -1574,8 +1634,9 @@ local function loadUI()
         dash.Position = UDim2.fromOffset(4, 4)
         dash.ScrollBarThickness = 3
         dash.ScrollBarImageColor3 = ACC
-        dash.CanvasSize = UDim2.fromOffset(0, 520)
-        dash.ZIndex = 40
+        dash.CanvasSize = UDim2.fromOffset(0, 560)
+        dash.ZIndex = 200
+        dash.BackgroundTransparency = 1
         dash.Parent = parent
 
         local lay = Instance.new("UIListLayout")
@@ -1900,13 +1961,19 @@ local function loadUI()
             end
         end)
 
-        -- hide default empty groupboxes under Info if they exist (optional soft hide)
+        -- hard-hide any leftover Info side content that would sit under the dash
         pcall(function()
+            if not Tabs.Info then return end
             for _, side in pairs(Tabs.Info.Sides or {}) do
-                if side and side.Parent then
-                    for _, ch in ipairs(side:GetChildren()) do
-                        if ch:IsA("Frame") and ch.Name ~= "SpentInfoDash" then
-                            -- leave library groupboxes; dash sits on container
+                local inst = side
+                if type(side) == "table" then
+                    inst = side.Holder or side.Frame or side.Container or side.Root
+                end
+                if typeof(inst) == "Instance" then
+                    inst.Visible = false
+                    for _, ch in ipairs(inst:GetDescendants()) do
+                        if ch:IsA("GuiObject") then
+                            ch.Visible = false
                         end
                     end
                 end
@@ -1914,14 +1981,7 @@ local function loadUI()
         end)
     end)
 
-    -- Lightweight fallback labels if custom dash fails
-    local infoLeft = Tabs.Info:AddLeftGroupbox("Spent Hub")
-    infoLeft:AddLabel("SPENT HUB")
-    infoLeft:AddLabel("made by spent")
-    infoLeft:AddLabel("Profile card loads on this tab")
-    local infoRight = Tabs.Info:AddRightGroupbox("Quick")
-    infoRight:AddLabel("RShift menu · End unload")
-    infoRight:AddLabel("F = noclip punch (PC)")
+    -- no fallback groupboxes — they were stacking under the new profile dash
 
     -- MAIN: silent aim core + fast switch (not forced to bottom)
     local aim = Tabs.Main:AddLeftGroupbox("Silent Aim")
@@ -2168,16 +2228,11 @@ local function loadUI()
     menu:AddButton({
         Text = "Unload",
         Func = function()
-            UserInputService.MouseIconEnabled = originalMouseIconEnabled
-            pcall(function() if cursorOuter then cursorOuter:Remove() end end)
-            pcall(function() if cursorInner then cursorInner:Remove() end end)
-            if cursorConnection then cursorConnection:Disconnect() end
-            pcall(function() fov_circle:Remove() end)
-            pcall(function() mouse_box:Remove() end)
-            stopNoclip(); stopNoclipPunch(); stopInvisible(); stopFastSwitch()
-            for _, p in ipairs(Players:GetPlayers()) do removeESPData(p) end
-            pcall(function() Library:Unload() end)
-            print("SPENT HUB unloaded.")
+            if getgenv().SpentUnloadHub then
+                getgenv().SpentUnloadHub()
+            else
+                pcall(function() Library:Unload() end)
+            end
         end,
     })
 
@@ -2381,33 +2436,100 @@ Players.PlayerRemoving:Connect(function(plr)
     removeESPData(plr)
 end)
 
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    -- Silent Aim key is blank by default (set on toggle KeyPicker)
-    if input.KeyCode == Enum.KeyCode.RightShift then
-        pcall(function() if Library and Library.Toggle then Library:Toggle() end end)
+local function spentToggleMenu()
+    local lib = Library or getgenv().Library
+    if not lib then return end
+    -- Obsidian / Linoria style APIs
+    local ok = false
+    ok = pcall(function()
+        if type(lib.Toggle) == "function" then
+            lib:Toggle()
+            return true
+        end
+    end) and true or ok
+    if not ok then
+        pcall(function()
+            if lib.Toggled ~= nil then
+                lib.Toggled = not lib.Toggled
+                ok = true
+            end
+        end)
     end
-    -- Fast Switch bind is blank by default; set via UI KeyPicker
-    -- Noclip Punch key is blank by default (set on toggle KeyPicker)
-    -- Spent Hub noclip punch: F on PC only (no toggle, no blank keybind)
+    pcall(function()
+        if lib.ScreenGui then
+            lib.ScreenGui.Enabled = not lib.ScreenGui.Enabled
+            ok = true
+        end
+    end)
+    pcall(function()
+        local root = lib.WindowContainer or lib.MainFrame or lib.Outer
+        if root and root:IsA("GuiObject") then
+            root.Visible = not root.Visible
+            ok = true
+        end
+    end)
+    -- last resort: any ScreenGui named like Obsidian/Spent
+    pcall(function()
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if not pg then return end
+        for _, g in ipairs(pg:GetChildren()) do
+            if g:IsA("ScreenGui") and (g.Name:lower():find("obsidian") or g.Name:lower():find("library") or g.Name:lower():find("spent")) then
+                g.Enabled = not g.Enabled
+            end
+        end
+    end)
+end
+
+local function spentUnloadHub()
+    UserInputService.MouseIconEnabled = originalMouseIconEnabled
+    pcall(function() if cursorOuter then cursorOuter:Remove() end end)
+    pcall(function() if cursorInner then cursorInner:Remove() end end)
+    if cursorConnection then pcall(function() cursorConnection:Disconnect() end) end
+    pcall(function() if fov_circle then fov_circle:Remove() end end)
+    pcall(function() if mouse_box then mouse_box:Remove() end end)
+    pcall(stopNoclip)
+    pcall(stopNoclipPunch)
+    pcall(stopInvisible)
+    pcall(stopFastSwitch)
+    pcall(function()
+        for _, p in ipairs(Players:GetPlayers()) do removeESPData(p) end
+    end)
+    local lib = Library or getgenv().Library
+    pcall(function()
+        if lib and type(lib.Unload) == "function" then
+            lib:Unload()
+        end
+    end)
+    pcall(function()
+        if lib and lib.ScreenGui then
+            lib.ScreenGui.Enabled = false
+            lib.ScreenGui:Destroy()
+        end
+    end)
+    print("SPENT HUB unloaded.")
+end
+getgenv().SpentUnloadHub = spentUnloadHub
+getgenv().SpentToggleMenu = spentToggleMenu
+
+-- Menu / unload binds: fire even if game marks input processed
+UserInputService.InputBegan:Connect(function(input, processed)
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        spentToggleMenu()
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.End then
+        spentUnloadHub()
+        return
+    end
+
+    -- remaining keys respect processed (game chat etc.)
+    if processed then return end
+
     if input.KeyCode == Enum.KeyCode.F and not IS_MOBILE then
         doNoclipPunch()
-    end
-    if input.KeyCode == Enum.KeyCode.End then
-        UserInputService.MouseIconEnabled = originalMouseIconEnabled
-        pcall(function() if cursorOuter then cursorOuter:Remove() end end)
-        pcall(function() if cursorInner then cursorInner:Remove() end end)
-        if cursorConnection then cursorConnection:Disconnect() end
-        
-        pcall(function() if Library and Library.Unload then Library:Unload() end end)
-        pcall(function() fov_circle:Remove() end)
-        pcall(function() mouse_box:Remove() end)
-        stopNoclip()
-        stopNoclipPunch()
-        stopInvisible()
-        stopFastSwitch()
-        for _, p in ipairs(Players:GetPlayers()) do removeESPData(p) end
-        print("SPENT HUB unloaded.")
     end
 end)
 
