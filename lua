@@ -22,7 +22,7 @@ startupFrame.Position = UDim2.new(0.5, -150, 0, -80)
 startupFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 startupFrame.BackgroundTransparency = 0.08
 startupFrame.BorderSizePixel = 0
-Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.1, 0)
+Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.11, 0)
 
 local startupStroke = Instance.new("UIStroke", startupFrame)
 startupStroke.Color = Color3.fromRGB(255, 182, 193)
@@ -65,11 +65,11 @@ Instance.new("UICorner", startupFill).CornerRadius = UDim.new(1, 0)
 TweenService:Create(startupFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
     Position = UDim2.new(0.5, -150, 0, 30)
 }):Play()
-TweenService:Create(startupFill, TweenInfo.new(3, Enum.EasingStyle.Linear), {
+TweenService:Create(startupFill, TweenInfo.new(1.2, Enum.EasingStyle.Linear), {
     Size = UDim2.new(1, 0, 1, 0)
 }):Play()
 
-task.wait(3)
+task.wait(1.2)
 
 TweenService:Create(startupFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
     Position = UDim2.new(0.5, -150, 0, -80),
@@ -124,7 +124,6 @@ local SilentAimSettings = {
     FastSwitchEnabled = false, FastSwitchDelay = 0.05,
     FastSwitchList = {"M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47"},
     FastSwitchHotkey = Enum.KeyCode.H, NoclipPunchEnabled = false,
-    -- extra features
     AutoReloadEnabled = false,
     GunModEnabled = false,
     FastFirerateEnabled = false,
@@ -161,7 +160,6 @@ local SilentAimSettings = {
     InfiniteJumpEnabled = false,
     CameraFOVEnabled = false,
     CameraFOV = 70,
-    -- blank hotkeys (user binds in UI); nil/None = unbound
     Hotkeys = {},
 }
 getgenv().SilentAimSettings = SilentAimSettings
@@ -219,7 +217,6 @@ local function _mkDraw(className)
     return d
 end
 
--- 6x6 tip ring + invert contrast
 local cursorOuter = _mkDraw("Circle")
 cursorOuter.Radius = 3.5
 cursorOuter.Thickness = 1.5
@@ -230,7 +227,7 @@ cursorOuter.Visible = not IS_MOBILE
 cursorOuter.Transparency = 1
 
 local cursorInner = _mkDraw("Circle")
-cursorInner.Radius = 3 -- ~6x6 footprint
+cursorInner.Radius = 3
 cursorInner.Thickness = 1
 cursorInner.NumSides = 24
 cursorInner.Filled = false
@@ -305,14 +302,12 @@ local ExpectedArguments = {
     Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } },
 }
 
--- Per-shot hitchance. No sticky cache (old 0.15s lock made low % feel like 100% on rapid fire).
 local _rng = Random.new()
 local function CalculateChance(Percentage)
     if Percentage == nil then return true end
     Percentage = tonumber(Percentage) or 100
     if Percentage >= 100 then return true end
     if Percentage <= 0 then return false end
-    -- roll in [0, 100): hit if roll < Percentage  → 30 means ~30% of shots redirect
     local roll = _rng:NextNumber(0, 100)
     return roll < Percentage
 end
@@ -589,7 +584,6 @@ RunService.Heartbeat:Connect(function()
     if not shootRemote then return end
     if not SilentAimSettings.Enabled or not SilentAimSettings.AutoshootEnabled then return end
     if not currentTarget or not currentTarget.Parent then return end
-    -- hitchance gate (same roll as silent aim)
     if not CalculateChance(SilentAimSettings.HitChance) then return end
     local char = LocalPlayer.Character
     local myHumanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -841,13 +835,12 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     if SilentAimSettings.FastSwitchEnabled then startFastSwitch() end
 end)
 
-
 -- ===================== NOTIFY =====================
 local Library = nil
 local function notify(text, color)
     pcall(function()
         if Library and Library.Notify then
-            Library:Notify({ Title = "SPENT HUB", Description = tostring(text), Time = 3 })
+            Library:Notify({ Title = "SPENT HUB", Description = tostring(text), Time = 1.2 })
         end
     end)
     print("[SPENT HUB]", text)
@@ -865,7 +858,7 @@ UserInputService.JumpRequest:Connect(function()
     if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
 end)
 
--- Camera FOV + spinbot + anti-sit style loops
+-- Camera FOV + spinbot
 RunService.RenderStepped:Connect(function()
     if SilentAimSettings.CameraFOVEnabled and Camera then
         Camera.FieldOfView = SilentAimSettings.CameraFOV or 70
@@ -1139,7 +1132,7 @@ task.spawn(function()
     end
 end)
 
--- Simple teleports (Prison Life common)
+-- Simple teleports
 local function tpTo(cf)
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if hrp then hrp.CFrame = cf end
@@ -1286,7 +1279,7 @@ task.spawn(function()
     end
 end)
 
--- Hotkey system: blank by default, toggle name -> KeyCode name string
+-- Hotkey system
 SilentAimSettings.Hotkeys = SilentAimSettings.Hotkeys or {}
 local hotkeyActions = {}
 local function registerHotkeyAction(id, fn)
@@ -1339,8 +1332,6 @@ local function loadUI()
     Library.Scheme.OutlineColor = Color3.fromRGB(28, 34, 44)
 
     local winW, winH = computeWindowSize()
-    -- 25% of the shorter window edge (user request)
-    local cornerR = math.floor(math.min(winW, winH) * 0.12)
     local Window = Library:CreateWindow({
         Title = "SPENT HUB",
         Footer = "SPENT HUB",
@@ -1354,23 +1345,45 @@ local function loadUI()
         Resizable = true,
         SidebarCompacted = true,
         ShowMobileButtons = true,
-        CornerRadius = cornerR,
+        CornerRadius = 11,
         Font = Enum.Font.Gotham,
         ToggleKeybind = Enum.KeyCode.RightShift,
     })
 
-    pcall(function()
-        Library.CornerRadius = cornerR
-        if Library.Corners then
-            for _, c in ipairs(Library.Corners) do
-                if c and c:IsA("UICorner") then
-                    c.CornerRadius = UDim.new(0, cornerR)
+    -- Force 11% corner radius across all UI corners after library builds window
+    task.defer(function()
+        pcall(function()
+            Library.CornerRadius = 11
+            local sg = Library.ScreenGui
+            if not sg then return end
+            for _, d in ipairs(sg:GetDescendants()) do
+                if d:IsA("UICorner") then
+                    -- Only apply to frames that are not pill/circular shapes
+                    local parent = d.Parent
+                    local isCircle = false
+                    if parent and parent:IsA("GuiObject") then
+                        local sX = parent.AbsoluteSize.X
+                        local sY = parent.AbsoluteSize.Y
+                        -- detect if it's being used as a perfect circle (toggle pill, dot etc)
+                        if math.abs(sX - sY) < 4 and sX < 32 then isCircle = true end
+                    end
+                    if not isCircle then
+                        d.CornerRadius = UDim.new(0.11, 0)
+                    end
                 end
             end
-        end
+        end)
+        pcall(function()
+            if Library.Corners then
+                for _, c in ipairs(Library.Corners) do
+                    if c and c:IsA("UICorner") then
+                        c.CornerRadius = UDim.new(0.11, 0)
+                    end
+                end
+            end
+        end)
     end)
 
-    -- Footer layout: left V1 · middle SPENT HUB (bold) · right made by spent
     task.defer(function()
         pcall(function()
             local sg = Library.ScreenGui
@@ -1389,7 +1402,6 @@ local function loadUI()
             end
         end)
     end)
-
 
     if workspace.CurrentCamera then
         workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
@@ -1436,7 +1448,6 @@ local function loadUI()
         end)
     end
 
-    -- plain toggle
     local function addToggle(group, idx, text, default, onChange)
         return group:AddToggle(idx, {
             Text = text,
@@ -1445,7 +1456,6 @@ local function loadUI()
         })
     end
 
-    -- important toggles only: blank keybind until user sets it
     local function addToggleHK(group, idx, text, default, onChange, hotkeyId)
         local tog = addToggle(group, idx, text, default, onChange)
         if tog and tog.AddKeyPicker and hotkeyId then
@@ -1471,8 +1481,6 @@ local function loadUI()
         return tog
     end
 
-
-    -- Ordered list toggles (mobile-friendly, no dropdown menus)
     local function listHas(list, name)
         if typeof(list) ~= "table" then return false end
         for _, v in ipairs(list) do if v == name then return true end end
@@ -1515,7 +1523,6 @@ local function loadUI()
                     end
                     lock = false
                 else
-                    -- keep one selected: if user turns off active choice, snap it back on
                     if getValue() == name then
                         lock = true
                         local t = Library.Toggles and Library.Toggles[idx]
@@ -1539,7 +1546,7 @@ local function loadUI()
     }
     local Toggles = Library.Toggles
 
-    -- INFO PAGE — premium Spent profile
+    -- INFO PAGE
     local scriptStartTime = tick()
     local function getGreeting()
         local hour = tonumber(os.date("%H"))
@@ -1570,7 +1577,6 @@ local function loadUI()
         return n
     end
 
-    -- Build rich Info dashboard into the tab body
     task.defer(function()
         local parent = nil
         pcall(function()
@@ -1593,7 +1599,6 @@ local function loadUI()
         if not parent then parent = Library.ScreenGui end
         if not parent then return end
 
-        -- clear prior spent info chrome + hide default Info groupboxes behind dash
         pcall(function()
             for _, name in ipairs({ "SpentInfoDash", "SpentProfileCard" }) do
                 local old = parent:FindFirstChild(name, true)
@@ -1608,7 +1613,6 @@ local function loadUI()
             end
         end)
         pcall(function()
-            -- hide Obsidian left/right side frames on Info so only dash shows
             if Tabs.Info and Tabs.Info.Sides then
                 for _, side in pairs(Tabs.Info.Sides) do
                     if typeof(side) == "Instance" then
@@ -1659,7 +1663,7 @@ local function loadUI()
             f.ZIndex = 41
             f.Parent = dash
             local c = Instance.new("UICorner")
-            c.CornerRadius = UDim.new(0, 12)
+            c.CornerRadius = UDim.new(0.11, 0)
             c.Parent = f
             local s = Instance.new("UIStroke")
             s.Color = Color3.fromRGB(40, 44, 56)
@@ -1687,9 +1691,7 @@ local function loadUI()
             return t
         end
 
-        -- HERO CARD
         local hero = card(128, 1)
-        -- accent bar
         local bar = Instance.new("Frame")
         bar.BorderSizePixel = 0
         bar.Size = UDim2.new(1, 0, 0, 3)
@@ -1725,7 +1727,6 @@ local function loadUI()
         hs.Thickness = 2
         hs.Transparency = 0.2
         hs.Parent = head
-        -- online dot
         local dot = Instance.new("Frame")
         dot.Size = UDim2.fromOffset(14, 14)
         dot.Position = UDim2.new(1, -16, 1, -16)
@@ -1788,14 +1789,12 @@ local function loadUI()
                     "https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png",
                     LocalPlayer.UserId
                 )
-                -- rbxthumb fallback
                 pcall(function()
                     head.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=420&h=420"
                 end)
             end
         end)
 
-        -- STATS ROW (3 mini cards in one frame)
         local stats = card(92, 2)
         local function statCell(xScale, title, valueName)
             local cell = Instance.new("Frame")
@@ -1806,7 +1805,7 @@ local function loadUI()
             cell.ZIndex = 42
             cell.Parent = stats
             local cc = Instance.new("UICorner")
-            cc.CornerRadius = UDim.new(0, 10)
+            cc.CornerRadius = UDim.new(0.11, 0)
             cc.Parent = cell
             label(cell, {
                 text = title,
@@ -1833,7 +1832,6 @@ local function loadUI()
         local pingVal = statCell(0.33, "PING", "PingVal")
         local timeVal = statCell(0.66, "LOCAL TIME", "TimeVal")
 
-        -- SESSION CARD
         local session = card(170, 3)
         label(session, {
             text = "SESSION",
@@ -1882,7 +1880,6 @@ local function loadUI()
             end
         end)
 
-        -- CONTROLS CARD
         local controls = card(120, 4)
         label(controls, {
             text = "CONTROLS",
@@ -1920,7 +1917,6 @@ local function loadUI()
             })
         end
 
-        -- ABOUT CARD
         local about = card(88, 5)
         label(about, {
             text = "ABOUT",
@@ -1941,7 +1937,6 @@ local function loadUI()
             valign = Enum.TextYAlignment.Top,
         }).TextWrapped = true
 
-        -- live clocks
         task.spawn(function()
             while dash.Parent do
                 local okStats, statsPing = pcall(function()
@@ -1961,7 +1956,6 @@ local function loadUI()
             end
         end)
 
-        -- hard-hide any leftover Info side content that would sit under the dash
         pcall(function()
             if not Tabs.Info then return end
             for _, side in pairs(Tabs.Info.Sides or {}) do
@@ -1981,9 +1975,7 @@ local function loadUI()
         end)
     end)
 
-    -- no fallback groupboxes — they were stacking under the new profile dash
-
-    -- MAIN: silent aim core + fast switch (not forced to bottom)
+    -- MAIN tab
     local aim = Tabs.Main:AddLeftGroupbox("Silent Aim")
     addToggleHK(aim, "SA_Enabled", "Silent Aim", SilentAimSettings.Enabled, function(v)
         SilentAimSettings.Enabled = v
@@ -2069,7 +2061,7 @@ local function loadUI()
         function() return SilentAimSettings.WeaponSoundPack or "None" end,
         function(v) SilentAimSettings.WeaponSoundPack = v; applySoundPackToAll() end)
 
-    -- PLAYER
+    -- PLAYER tab
     local pl = Tabs.Player:AddLeftGroupbox("Character")
     addToggleHK(pl, "PL_Noclip", "Noclip", SilentAimSettings.NoclipEnabled, function(v)
         SilentAimSettings.NoclipEnabled = v
@@ -2148,7 +2140,7 @@ local function loadUI()
     we:AddButton({ Text = "TP Gate", Func = function() getgenv().SpentTeleports.Gate() end })
     we:AddButton({ Text = "TP Armory", Func = function() getgenv().SpentTeleports.Armory() end })
 
-    -- VISUALS
+    -- VISUALS tab
     local esp = Tabs.Visuals:AddLeftGroupbox("ESP")
     addToggleHK(esp, "ESP_On", "Enable ESP", SilentAimSettings.ESP_Enabled, function(v) SilentAimSettings.ESP_Enabled = v end, "ESP")
     addToggle(esp, "ESP_Team", "Team Colors", SilentAimSettings.ESP_Team, function(v) SilentAimSettings.ESP_Team = v end)
@@ -2182,7 +2174,7 @@ local function loadUI()
         function() return SilentAimSettings.KillSoundName or "Vine Boom" end,
         function(v) SilentAimSettings.KillSoundName = v end)
 
-    -- WORLD
+    -- WORLD tab
     local world = Tabs.World:AddLeftGroupbox("Environment")
     addToggle(world, "NoFog", "Remove Fog", SilentAimSettings.RemoveFog, function(v)
         SilentAimSettings.RemoveFog = v; applyFog()
@@ -2200,7 +2192,7 @@ local function loadUI()
         SilentAimSettings.WorldGradient = v; applyWorldGradient()
     end)
 
-    -- SETTINGS accent + unload
+    -- SETTINGS tab
     local accentBox = Tabs.Settings:AddLeftGroupbox("Accent Color")
     if accentBox.AddColorPicker then
         accentBox:AddColorPicker("AccentPicker", {
@@ -2236,12 +2228,11 @@ local function loadUI()
         end,
     })
 
-    Library:Notify({ Title = "SPENT HUB", Description = "made by spent · loaded", Time = 4 })
+    Library:Notify({ Title = "SPENT HUB", Description = "made by spent · loaded", Time = 1.2 })
     return Library
 end
 
 Library = loadUI()
-
 
 local espData = {}
 local ESP_LOGIC_INTERVAL = 0.05
@@ -2439,7 +2430,6 @@ end)
 local function spentToggleMenu()
     local lib = Library or getgenv().Library
     if not lib then return end
-    -- Obsidian / Linoria style APIs
     local ok = false
     ok = pcall(function()
         if type(lib.Toggle) == "function" then
@@ -2468,7 +2458,6 @@ local function spentToggleMenu()
             ok = true
         end
     end)
-    -- last resort: any ScreenGui named like Obsidian/Spent
     pcall(function()
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         if not pg then return end
@@ -2511,7 +2500,6 @@ end
 getgenv().SpentUnloadHub = spentUnloadHub
 getgenv().SpentToggleMenu = spentToggleMenu
 
--- Menu / unload binds: fire even if game marks input processed
 UserInputService.InputBegan:Connect(function(input, processed)
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 
@@ -2525,7 +2513,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
         return
     end
 
-    -- remaining keys respect processed (game chat etc.)
     if processed then return end
 
     if input.KeyCode == Enum.KeyCode.F and not IS_MOBILE then
