@@ -1340,7 +1340,7 @@ local function loadUI()
 
     local winW, winH = computeWindowSize()
     -- 25% of the shorter window edge (user request)
-    local cornerR = math.floor(math.min(winW, winH) * 0.12)
+    local cornerR = math.floor(math.min(winW, winH) * 0.11)
     local Window = Library:CreateWindow({
         Title = "SPENT HUB",
         Footer = "SPENT HUB",
