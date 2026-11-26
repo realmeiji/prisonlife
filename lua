@@ -2126,6 +2126,104 @@ task.defer(function()
     end)
 end)
 
+-- Floating Fast Switch toggle — mobile / touch
+task.defer(function()
+    pcall(function()
+        local touch = UserInputService.TouchEnabled
+        if not touch then return end
+        local pg = LocalPlayer:WaitForChild("PlayerGui", 10)
+        if not pg then return end
+        local old = pg:FindFirstChild("SpentHubFastSwitchBtn")
+        if old then old:Destroy() end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "SpentHubFastSwitchBtn"
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.DisplayOrder = 151
+        gui.Parent = pg
+
+        local btn = Instance.new("TextButton")
+        btn.Name = "FastSwitchToggle"
+        btn.Size = UDim2.fromOffset(56, 56)
+        btn.Position = UDim2.new(1, -68, 0.55, 0)
+        btn.AnchorPoint = Vector2.new(0, 0)
+        btn.BackgroundColor3 = Color3.fromRGB(18, 22, 30)
+        btn.BackgroundTransparency = 0.12
+        btn.Text = "FS"
+        btn.TextColor3 = Color3.fromRGB(255, 182, 193)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 16
+        btn.AutoButtonColor = true
+        btn.Parent = gui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = btn
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 1.4
+        stroke.Transparency = 0.2
+        stroke.Parent = btn
+
+        local sub = Instance.new("TextLabel")
+        sub.Name = "State"
+        sub.BackgroundTransparency = 1
+        sub.Size = UDim2.new(1, 0, 0, 14)
+        sub.Position = UDim2.new(0, 0, 1, -16)
+        sub.Font = Enum.Font.Gotham
+        sub.TextSize = 9
+        sub.TextColor3 = Color3.fromRGB(180, 180, 190)
+        sub.Text = "OFF"
+        sub.Parent = btn
+
+        local function paint()
+            local on = SilentAimSettings.FastSwitchEnabled == true
+            if on then
+                btn.BackgroundColor3 = Color3.fromRGB(255, 182, 193)
+                btn.TextColor3 = Color3.fromRGB(20, 16, 22)
+                stroke.Color = Color3.fromRGB(255, 220, 230)
+                sub.Text = "ON"
+                sub.TextColor3 = Color3.fromRGB(40, 30, 36)
+            else
+                btn.BackgroundColor3 = Color3.fromRGB(18, 22, 30)
+                btn.TextColor3 = Color3.fromRGB(255, 182, 193)
+                stroke.Color = Color3.fromRGB(255, 182, 193)
+                sub.Text = "OFF"
+                sub.TextColor3 = Color3.fromRGB(180, 180, 190)
+            end
+        end
+        paint()
+
+        local function toggleFS()
+            SilentAimSettings.FastSwitchEnabled = not SilentAimSettings.FastSwitchEnabled
+            if SilentAimSettings.FastSwitchEnabled then
+                startFastSwitch()
+            else
+                stopFastSwitch()
+            end
+            -- sync library toggle if present
+            pcall(function()
+                local t = Library and Library.Toggles and Library.Toggles["FS_On"]
+                if t and t.SetValue then t:SetValue(SilentAimSettings.FastSwitchEnabled) end
+            end)
+            paint()
+            notify("Fast Switch " .. (SilentAimSettings.FastSwitchEnabled and "on" or "off"))
+        end
+
+        btn.MouseButton1Click:Connect(toggleFS)
+        -- touch
+        btn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                -- click also fires; avoid double via debounce
+            end
+        end)
+
+        getgenv().SpentFastSwitchMobilePaint = paint
+    end)
+end)
+
+
 
 
 local espData = {}
