@@ -118,50 +118,15 @@ local SilentAimSettings = {
     ESP_NameColor = Color3.fromRGB(255, 255, 255),
     ESP_HPColor = Color3.fromRGB(80, 255, 100),
     ESP_TraceColor = Color3.fromRGB(255, 255, 255),
-    AutoshootEnabled = false, NoclipEnabled = false,
-    SpeedValue = 16, JumpPowerValue = 50,
-    InvisibleEnabled = false, KorbloxEnabled = false, HeadlessEnabled = false,
+    AutoshootEnabled = false,
+    KorbloxEnabled = false, HeadlessEnabled = false,
     FastSwitchEnabled = false, FastSwitchDelay = 0.05,
     FastSwitchList = {"M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47"},
-    FastSwitchHotkey = Enum.KeyCode.H, NoclipPunchEnabled = false,
-    -- extra features
-    AutoReloadEnabled = false,
-    GunModEnabled = false,
-    FastFirerateEnabled = false,
-    FireRateValue = 0.01,
-    AutoFire = false,
-    HitboxExpanderEnabled = false,
-    HitboxTeamCheck = true,
-    HitboxSize = 5,
-    HitboxTransparency = 0.5,
-    HitboxShape = "Box",
-    KillEffectEnabled = false,
-    KillEffectColor = Color3.fromRGB(255, 182, 193),
-    KillEffectFadeDuration = 0.25,
-    KillLogsEnabled = false,
-    HitLogsEnabled = false,
-    CustomHitSoundEnabled = false,
-    CustomKillSoundEnabled = false,
-    HitSoundName = "Neverlose",
-    KillSoundName = "Vine Boom",
-    WeaponSoundPack = "None",
-    TracerESPEnabled = false,
-    TracerTargetOnly = false,
-    TracerThickness = 0.15,
-    TracerColor = Color3.fromRGB(255, 182, 193),
     RemoveFog = false,
     CustomSkybox = false,
     SkyboxName = "None",
     WorldGradient = false,
-    GetWeaponsList = {"M9", "AK-47", "M4A1", "Remington 870", "M700", "MP5", "Revolver"},
-    AutoGetWeapons = false,
-    SpinbotSpeed = 0,
-    AntiInvisibleEnabled = false,
-    InfiniteStamina = false,
-    InfiniteJumpEnabled = false,
-    CameraFOVEnabled = false,
-    CameraFOV = 70,
-    -- blank hotkeys (user binds in UI); nil/None = unbound
+    ReloadShuffleKey = "None", -- PC only, blank until set
     Hotkeys = {},
 }
 getgenv().SilentAimSettings = SilentAimSettings
@@ -199,7 +164,42 @@ local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
 local FindFirstChild = game.FindFirstChild
 local RenderStepped = RunService.RenderStepped
 local GetMouseLocation = UserInputService.GetMouseLocation
-local ValidTargetParts = {"Head", "HumanoidRootPart"}
+local ValidTargetParts = { "Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg" }
+-- R6 + R15 name maps for limbs
+local TARGET_PART_ALIASES = {
+    Head = { "Head" },
+    HumanoidRootPart = { "HumanoidRootPart" },
+    LeftArm = { "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand" },
+    RightArm = { "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand" },
+    LeftLeg = { "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot" },
+    RightLeg = { "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot" },
+}
+local function resolveTargetPart(character, partName)
+    if not character or not partName then return nil end
+    if partName == "Random" then
+        -- shuffle logical parts, pick first that exists on this character
+        local order = { unpack(ValidTargetParts) }
+        for i = #order, 2, -1 do
+            local j = math.random(1, i)
+            order[i], order[j] = order[j], order[i]
+        end
+        for _, logical in ipairs(order) do
+            local p = resolveTargetPart(character, logical)
+            if p then return p end
+        end
+        return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head")
+    end
+    local aliases = TARGET_PART_ALIASES[partName]
+    if aliases then
+        for _, name in ipairs(aliases) do
+            local p = character:FindFirstChild(name)
+            if p then return p end
+        end
+        return nil
+    end
+    return character:FindFirstChild(partName)
+end
+
 local PredictionAmount = 0.165
 
 local originalMouseIconEnabled = UserInputService.MouseIconEnabled
@@ -207,15 +207,48 @@ if not IS_MOBILE then
     UserInputService.MouseIconEnabled = false
 end
 
-local function _mkDraw(className)
+local HAS_DRAWING = false
+pcall(function()
     if typeof(Drawing) == "table" and typeof(Drawing.new) == "function" then
-        local ok, o = pcall(Drawing.new, className)
-        if ok and o then return o end
+        local ok, test = pcall(Drawing.new, "Circle")
+        if ok and test then
+            HAS_DRAWING = true
+            pcall(function() test:Remove() end)
+        end
     end
-    local d = { Visible = false, Color = Color3.new(1,1,1), Thickness = 1, Radius = 3,
-        Position = Vector2.new(), NumSides = 24, Filled = false, Transparency = 1, ZIndex = 100,
-        Size = Vector2.new(), Text = "", From = Vector2.new(), To = Vector2.new() }
+end)
+
+local function _mkDraw(className)
+    if HAS_DRAWING then
+        local ok, o = pcall(Drawing.new, className)
+        if ok and o then
+            o._dummy = false
+            return o
+        end
+    end
+    -- Dummy object: safe no-op so ESP/FOV never crash on weak executors
+    local d = {
+        _dummy = true,
+        Visible = false,
+        Color = Color3.new(1, 1, 1),
+        Thickness = 1,
+        Radius = 3,
+        Position = Vector2.new(),
+        NumSides = 24,
+        Filled = false,
+        Transparency = 1,
+        ZIndex = 100,
+        Size = Vector2.new(),
+        Text = "",
+        From = Vector2.new(),
+        To = Vector2.new(),
+        Font = 2,
+        Center = true,
+        Outline = true,
+        OutlineColor = Color3.new(0, 0, 0),
+    }
     function d:Remove() end
+    function d:Destroy() end
     return d
 end
 
@@ -305,15 +338,57 @@ local ExpectedArguments = {
     Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } },
 }
 
-local lastRollTime, lastRollResult = 0, false
+-- Per-shot hitchance. No sticky cache (old 0.15s lock made low % feel like 100% on rapid fire).
+local _rng = Random.new()
+-- One roll per shot burst (shared by multi-pellet rays). Independent per-ray 30% on a
+-- shotgun makes almost every click land at least once — that felt like 100%.
+local _shotRollExpire, _shotRollResult = 0, false
+local SHOT_ROLL_WINDOW = 0.055
+
+local function getEffectiveHitChance()
+    local base = tonumber(SilentAimSettings.HitChance) or 100
+    if base >= 100 then return 100 end
+    if base <= 0 then return 0 end
+    -- long range: reduce effective chance so far shots don't delete people
+    local tgt = currentTarget
+    local char = LocalPlayer.Character
+    local myHRP = char and char:FindFirstChild("HumanoidRootPart")
+    local their = tgt and tgt.Parent and (tgt.Parent:FindFirstChild("HumanoidRootPart") or tgt)
+    if myHRP and their and their:IsA("BasePart") then
+        local dist = (their.Position - myHRP.Position).Magnitude
+        if dist > 80 then
+            -- 80 studs: 100% of base · 350+ studs: ~45% of base
+            local t = math.clamp((dist - 80) / 270, 0, 1)
+            base = base * (1 - t * 0.55)
+        end
+    end
+    return base
+end
+
 local function CalculateChance(Percentage)
     local now = tick()
-    if now - lastRollTime < 0.15 then return lastRollResult end
-    lastRollTime = now
-    Percentage = math.floor(Percentage)
-    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
-    lastRollResult = chance <= Percentage / 100
-    return lastRollResult
+    -- reuse same decision for every ray in this shot (pellets / multi-casts)
+    if now < _shotRollExpire then
+        return _shotRollResult
+    end
+    local pct = Percentage
+    if pct == nil then
+        pct = getEffectiveHitChance()
+    else
+        pct = tonumber(pct) or 100
+        -- still apply range falloff when caller passes raw HitChance
+        local eff = getEffectiveHitChance()
+        if eff < pct then pct = eff end
+    end
+    if pct >= 100 then
+        _shotRollResult = true
+    elseif pct <= 0 then
+        _shotRollResult = false
+    else
+        _shotRollResult = _rng:NextNumber(0, 100) < pct
+    end
+    _shotRollExpire = now + SHOT_ROLL_WINDOW
+    return _shotRollResult
 end
 
 local function getPositionOnScreen(Vector)
@@ -423,13 +498,8 @@ local function getClosestPlayer()
         if not OnScreen then continue end
         local Distance = (origin - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or SilentAimSettings.FOVRadius or 2000) then
-            local targetPartName = SilentAimSettings.TargetPart
-            local partInstance
-            if targetPartName == "Random" then
-                partInstance = Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]
-            else
-                partInstance = Character[targetPartName]
-            end
+            local partInstance = resolveTargetPart(Character, SilentAimSettings.TargetPart)
+            if not partInstance then continue end
             Closest = partInstance
             DistanceToMouse = Distance
         end
@@ -588,6 +658,8 @@ RunService.Heartbeat:Connect(function()
     if not shootRemote then return end
     if not SilentAimSettings.Enabled or not SilentAimSettings.AutoshootEnabled then return end
     if not currentTarget or not currentTarget.Parent then return end
+    -- hitchance gate (same roll as silent aim)
+    if not CalculateChance(SilentAimSettings.HitChance) then return end
     local char = LocalPlayer.Character
     local myHumanoid = char and char:FindFirstChildOfClass("Humanoid")
     if not myHumanoid or myHumanoid.Health <= 0 then return end
@@ -828,8 +900,8 @@ end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
-    if SilentAimSettings.NoclipEnabled then startNoclip() end
-    if SilentAimSettings.InvisibleEnabled then startInvisible() end
+    -- noclip removed
+    -- invisible removed
     if SilentAimSettings.HeadlessEnabled then applyHeadless(char) end
     if SilentAimSettings.KorbloxEnabled then applyKorblox(char) end
     task.wait(0.1)
@@ -853,395 +925,8 @@ end
 -- ===================== SPENT HUB EXTRA FEATURES =====================
 local Lighting = game:GetService("Lighting")
 local Debris = game:GetService("Debris")
-local StarterGui = game:GetService("StarterGui")
 
--- Infinite jump
-UserInputService.JumpRequest:Connect(function()
-    if not SilentAimSettings.InfiniteJumpEnabled then return end
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-end)
-
--- Camera FOV + spinbot + anti-sit style loops
-RunService.RenderStepped:Connect(function()
-    if SilentAimSettings.CameraFOVEnabled and Camera then
-        Camera.FieldOfView = SilentAimSettings.CameraFOV or 70
-    end
-    local spd = tonumber(SilentAimSettings.SpinbotSpeed) or 0
-    if spd > 0 then
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(spd), 0) end
-    end
-end)
-
--- Infinite stamina
-task.spawn(function()
-    while task.wait(0.5) do
-        if not SilentAimSettings.InfiniteStamina then continue end
-        pcall(function()
-            local char = LocalPlayer.Character
-            if not char then return end
-            for _, v in ipairs(char:GetDescendants()) do
-                if v:IsA("LocalScript") and (v.Name:lower():find("jump") or v.Name:lower():find("stamina")) then
-                    v.Disabled = true
-                end
-            end
-        end)
-    end
-end)
-
--- Anti-invisible
-local AntiInvisibleThreads, AntiInvisibleWhitelist = {}, {
-    ["rbxassetid://507766388"] = true, ["rbxassetid://507766666"] = true,
-    ["rbxassetid://507770239"] = true, ["rbxassetid://507770453"] = true,
-    ["rbxassetid://507771019"] = true, ["rbxassetid://507771955"] = true,
-    ["rbxassetid://507776043"] = true, ["rbxassetid://507776720"] = true,
-    ["rbxassetid://507777268"] = true, ["rbxassetid://507777451"] = true,
-}
-pcall(function()
-    for _, a in ipairs(ReplicatedStorage:GetDescendants()) do
-        if a:IsA("Animation") then AntiInvisibleWhitelist[a.AnimationId] = true end
-    end
-end)
-local function watchAnim(track)
-    local id = track.Animation and track.Animation.AnimationId
-    if not id or AntiInvisibleWhitelist[id] then return end
-    if AntiInvisibleThreads[track] then task.cancel(AntiInvisibleThreads[track]) end
-    AntiInvisibleThreads[track] = task.spawn(function()
-        repeat track:AdjustWeight(0, 0) task.wait()
-        until not (track.IsPlaying and SilentAimSettings.AntiInvisibleEnabled)
-        AntiInvisibleThreads[track] = nil
-    end)
-end
-local function hookCharAnims(character)
-    local hum = character:WaitForChild("Humanoid", 5)
-    if not hum then return end
-    local anim = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 5)
-    if not anim then return end
-    anim.AnimationPlayed:Connect(function(track)
-        if SilentAimSettings.AntiInvisibleEnabled then watchAnim(track) end
-    end)
-end
-local function hookPlrAnims(plr)
-    if plr == LocalPlayer then return end
-    if plr.Character then task.spawn(hookCharAnims, plr.Character) end
-    plr.CharacterAdded:Connect(function(c) task.spawn(hookCharAnims, c) end)
-end
-for _, p in ipairs(Players:GetPlayers()) do hookPlrAnims(p) end
-Players.PlayerAdded:Connect(hookPlrAnims)
-
--- Hitbox
-local hitboxModified = {}
-local function resetHitbox(hrp)
-    if not hrp or not hrp.Parent then return end
-    hrp.Size = Vector3.new(2, 2, 1)
-    hrp.Transparency = 1
-    hrp.CanCollide = false
-    hrp.Material = Enum.Material.Plastic
-    hrp.Shape = Enum.PartType.Block
-end
-local function applyHitbox(plr)
-    if plr == LocalPlayer then return end
-    local char = plr.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum and (hum.Sit or hum.SeatPart) then
-        if hitboxModified[hrp] then resetHitbox(hrp); hitboxModified[hrp] = nil end
-        return
-    end
-    if SilentAimSettings.HitboxTeamCheck and LocalPlayer.Team and plr.Team == LocalPlayer.Team then
-        if hitboxModified[hrp] then resetHitbox(hrp); hitboxModified[hrp] = nil end
-        return
-    end
-    local size = SilentAimSettings.HitboxSize or 5
-    hrp.Size = Vector3.new(size, size, size)
-    hrp.Transparency = SilentAimSettings.HitboxTransparency or 0.5
-    hrp.CanCollide = false
-    hrp.Material = Enum.Material.ForceField
-    hrp.Shape = (SilentAimSettings.HitboxShape == "Ball") and Enum.PartType.Ball or Enum.PartType.Block
-    hitboxModified[hrp] = true
-end
-RunService.Heartbeat:Connect(function()
-    if not SilentAimSettings.HitboxExpanderEnabled then
-        for hrp in pairs(hitboxModified) do resetHitbox(hrp) end
-        table.clear(hitboxModified)
-        return
-    end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then applyHitbox(plr) end
-    end
-end)
-
--- Tracer beams
-local tracerBeams = {}
-local function removeTracerBeam(plr)
-    local d = tracerBeams[plr]
-    if not d then return end
-    pcall(function() if d.Beam then d.Beam:Destroy() end end)
-    pcall(function() if d.Start then d.Start:Destroy() end end)
-    pcall(function() if d.End then d.End:Destroy() end end)
-    tracerBeams[plr] = nil
-end
-local function updateTracerBeam(plr)
-    local char = plr.Character
-    local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local targetHRP = char and char:FindFirstChild("HumanoidRootPart")
-    if not char or not localHRP or not targetHRP then removeTracerBeam(plr) return end
-    local data = tracerBeams[plr]
-    if not data then
-        local a0 = Instance.new("Attachment"); a0.Parent = localHRP
-        local a1 = Instance.new("Attachment"); a1.Parent = targetHRP
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = a0; beam.Attachment1 = a1
-        beam.FaceCamera = true; beam.Parent = targetHRP
-        data = { Beam = beam, Start = a0, End = a1 }
-        tracerBeams[plr] = data
-    end
-    local color = SilentAimSettings.TracerColor or Color3.fromRGB(255, 182, 193)
-    if currentTarget and currentTarget.Parent == char then color = TARGET_LOCK_COLOR
-    elseif plr.Team and plr.Team.TeamColor then color = plr.Team.TeamColor.Color end
-    data.Beam.Color = ColorSequence.new(color)
-    data.Beam.Width0 = SilentAimSettings.TracerThickness or 0.15
-    data.Beam.Width1 = SilentAimSettings.TracerThickness or 0.15
-    data.Beam.Enabled = true
-end
-RunService.Heartbeat:Connect(function()
-    if not (SilentAimSettings.ESP_Enabled and SilentAimSettings.TracerESPEnabled) then
-        for plr in pairs(tracerBeams) do removeTracerBeam(plr) end
-        return
-    end
-    if SilentAimSettings.TracerTargetOnly then
-        local tp = currentTarget and currentTarget.Parent and Players:GetPlayerFromCharacter(currentTarget.Parent)
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer then
-                if plr == tp then updateTracerBeam(plr) else removeTracerBeam(plr) end
-            end
-        end
-        return
-    end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 0 then updateTracerBeam(plr) else removeTracerBeam(plr) end
-        end
-    end
-end)
-
--- Gun mod / firerate / auto fire
-local ToolPropertiesFolder = nil
-pcall(function()
-    ToolPropertiesFolder = ReplicatedStorage:WaitForChild("SharedModules", 5):WaitForChild("ToolProperties", 5)
-end)
-local gunModNames = {"AK-47", "Remington 870", "M9", "M700", "M4A1", "FAL", "MP5", "Revolver"}
-local function applyGunMod(tool)
-    if not tool or not tool:IsA("Tool") or not table.find(gunModNames, tool.Name) then return end
-    if not SilentAimSettings.GunModEnabled then return end
-    tool:SetAttribute("AutoFire", SilentAimSettings.AutoFire == true)
-    if SilentAimSettings.FastFirerateEnabled then
-        local rate = SilentAimSettings.FireRateValue or 0.01
-        tool:SetAttribute("FireRate", rate)
-        if ToolPropertiesFolder then
-            pcall(function()
-                local mod = ToolPropertiesFolder:FindFirstChild(tool.Name)
-                if mod then
-                    local props = require(mod)
-                    props.FireRate = rate
-                    props.AutoFire = SilentAimSettings.AutoFire == true
-                end
-            end)
-        end
-    end
-end
-local function applyGunModToAllTools()
-    local char = LocalPlayer.Character
-    if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then applyGunMod(t) end end end
-    local bp = LocalPlayer:FindFirstChild("Backpack")
-    if bp then for _, t in ipairs(bp:GetChildren()) do if t:IsA("Tool") then applyGunMod(t) end end end
-end
-local function hookGunContainer(container)
-    if not container then return end
-    container.ChildAdded:Connect(function(c) if c:IsA("Tool") then task.defer(applyGunMod, c) end end)
-end
-hookGunContainer(LocalPlayer:FindFirstChild("Backpack"))
-if LocalPlayer.Character then hookGunContainer(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(function(char)
-    hookGunContainer(char)
-    task.defer(applyGunModToAllTools)
-end)
-
--- Auto reload
-RunService.Heartbeat:Connect(function()
-    if not SilentAimSettings.AutoReloadEnabled then return end
-    local char = LocalPlayer.Character
-    if not char then return end
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") and table.find(gunModNames, tool.Name) then
-            local ammo = tool:GetAttribute("CurrentAmmo") or tool:GetAttribute("Local_CurrentAmmo")
-            if typeof(ammo) == "number" and ammo <= 0 then pcall(function() tool:Activate() end) end
-        end
-    end
-end)
-
--- Get weapons
-local gettingWeapon = false
-local function getWeapon(ToolName)
-    if gettingWeapon then return end
-    gettingWeapon = true
-    local Char = LocalPlayer.Character
-    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
-    if not (Char and Root) then gettingWeapon = false return end
-    if LocalPlayer.Backpack:FindFirstChild(ToolName) or Char:FindFirstChild(ToolName) then
-        gettingWeapon = false return
-    end
-    local Giver
-    for _, v in ipairs(workspace:GetDescendants()) do
-        if v.Name == "TouchGiver" and v:GetAttribute("ToolName") == ToolName then
-            Giver = v:FindFirstChildWhichIsA("BasePart"); break
-        end
-    end
-    if not Giver then gettingWeapon = false; notify("No giver: " .. tostring(ToolName)); return end
-    local orig = Giver.CFrame
-    local under = orig - Vector3.new(0, 15.5, 0)
-    Giver.CanTouch = true
-    Giver.CFrame = under
-    Root.Anchored = true
-    Char:PivotTo(under + Vector3.new(0, 5, 0))
-    task.wait(0.25)
-    pcall(function() firetouchinterest(Giver, Root, 0) end)
-    task.wait(0.3)
-    pcall(function() firetouchinterest(Giver, Root, 1) end)
-    if Giver.Parent then Giver.CFrame = orig end
-    local got, t = false, 0
-    while t < 4 do
-        if LocalPlayer.Backpack:FindFirstChild(ToolName) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(ToolName)) then
-            got = true; break
-        end
-        task.wait(0.1); t = t + 0.1
-    end
-    Root.Anchored = false
-    gettingWeapon = false
-    notify(got and ("Got " .. ToolName) or ("Failed " .. ToolName))
-end
-getgenv().GetWeapons = function()
-    task.spawn(function()
-        for _, name in ipairs(SilentAimSettings.GetWeaponsList or {}) do
-            getWeapon(name); task.wait(0.35)
-        end
-    end)
-end
-task.spawn(function()
-    while task.wait(8) do
-        if SilentAimSettings.AutoGetWeapons then pcall(getgenv().GetWeapons) end
-    end
-end)
-
--- Simple teleports (Prison Life common)
-local function tpTo(cf)
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.CFrame = cf end
-end
-getgenv().SpentTeleports = {
-    CriminalBase = function() tpTo(CFrame.new(-920, 95, 2138)) end,
-    Yard = function() tpTo(CFrame.new(791, 98, 2490)) end,
-    Cafeteria = function() tpTo(CFrame.new(918, 99, 2434)) end,
-    Gate = function() tpTo(CFrame.new(763, 99, 2472)) end,
-    Armory = function() tpTo(CFrame.new(835, 99, 2313)) end,
-}
-
--- Kill effect / logs / sounds
-local KillEffectGui = Instance.new("ScreenGui")
-KillEffectGui.Name = "SpentKillFX"
-KillEffectGui.ResetOnSpawn = false
-KillEffectGui.IgnoreGuiInset = true
-KillEffectGui.DisplayOrder = 999
-KillEffectGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-local KillEffectFrame = Instance.new("Frame")
-KillEffectFrame.Size = UDim2.fromScale(1, 1)
-KillEffectFrame.BackgroundTransparency = 1
-KillEffectFrame.BorderSizePixel = 0
-KillEffectFrame.Parent = KillEffectGui
-local killFxPlaying = false
-local function playKillEffect()
-    if not SilentAimSettings.KillEffectEnabled or killFxPlaying then return end
-    killFxPlaying = true
-    KillEffectFrame.BackgroundColor3 = SilentAimSettings.KillEffectColor or Color3.fromRGB(255, 182, 193)
-    local d = SilentAimSettings.KillEffectFadeDuration or 0.25
-    local a = TweenService:Create(KillEffectFrame, TweenInfo.new(d/2), { BackgroundTransparency = 0.45 })
-    local b = TweenService:Create(KillEffectFrame, TweenInfo.new(d/2), { BackgroundTransparency = 1 })
-    a:Play(); a.Completed:Wait(); b:Play(); b.Completed:Wait()
-    killFxPlaying = false
-end
-local HitSounds = {
-    ["TF2 Hit"] = 137392628136734, ["Neverlose"] = 82938206376993, ["Minecraft Hit 1"] = 135478009117226,
-    ["MLG Hit"] = 109817519733426, ["Rust"] = 1255040462, ["Skeet"] = 5633695679, ["Fatality"] = 6534947869,
-}
-local KillSounds = {
-    ["Fahhh"] = 93458245768554, ["Vine Boom"] = 140367458608473, ["CoD Kaboom"] = 7358219350,
-    ["Laugh"] = 87825295777427, ["iPhone Ding"] = 120612883125769, ["Creepy Bell"] = 98025615996882,
-}
-local function playSoundId(id)
-    if not id then return end
-    local s = Instance.new("Sound")
-    s.SoundId = "rbxassetid://" .. tostring(id)
-    s.Volume = 1
-    s.Parent = workspace.CurrentCamera
-    s:Play()
-    Debris:AddItem(s, 5)
-end
-local function playHitSound()
-    if SilentAimSettings.CustomHitSoundEnabled then
-        playSoundId(HitSounds[SilentAimSettings.HitSoundName])
-    end
-end
-local function playKillSound()
-    if SilentAimSettings.CustomKillSoundEnabled then
-        playSoundId(KillSounds[SilentAimSettings.KillSoundName])
-    end
-end
-local KillFeedFolder = ReplicatedStorage:FindFirstChild("Killfeed") or ReplicatedStorage:WaitForChild("Killfeed", 5)
-if KillFeedFolder then
-    KillFeedFolder.ChildAdded:Connect(function(entry)
-        if not entry:IsA("IntValue") then return end
-        local kd, ku, vd, w = entry.Name:match("^(.-)%s*%(@(.-)%)%s*killed%s+(.-)%s+with%s+(.+)$")
-        if not kd then return end
-        if SilentAimSettings.KillLogsEnabled then
-            notify(kd .. " killed " .. tostring(vd) .. " with " .. tostring(w))
-        end
-        if ku == LocalPlayer.Name then
-            task.spawn(playKillEffect)
-            playKillSound()
-        end
-    end)
-end
-
--- Weapon sound packs
-local SoundPacks = {
-    ["Silenced Shot"] = 9341262362, ["Bubble Shot"] = 109244508089412,
-    ["Laser Shot"] = 109075387966089, ["Dart Gun"] = 5924183835, ["Neverlose"] = 82938206376993,
-}
-local function applySoundPackToTool(tool)
-    if not tool or not tool:IsA("Tool") or not table.find(gunModNames, tool.Name) then return end
-    local pack = SilentAimSettings.WeaponSoundPack
-    if not pack or pack == "None" then return end
-    local id = SoundPacks[pack]
-    if not id then return end
-    local h = tool:FindFirstChild("Handle")
-    local ss = h and h:FindFirstChild("ShootSound")
-    if ss then ss.SoundId = "rbxassetid://" .. id end
-end
-local function applySoundPackToAll()
-    local char = LocalPlayer.Character
-    if char then for _, t in ipairs(char:GetChildren()) do applySoundPackToTool(t) end end
-    local bp = LocalPlayer:FindFirstChild("Backpack")
-    if bp then for _, t in ipairs(bp:GetChildren()) do applySoundPackToTool(t) end end
-end
-LocalPlayer.CharacterAdded:Connect(function(char)
-    char.ChildAdded:Connect(function(c) if c:IsA("Tool") then task.defer(applySoundPackToTool, c) end end)
-    task.defer(applySoundPackToAll)
-end)
-
--- Skybox / fog / gradient
+-- Skybox / fog / gradient (kept)
 local Skyboxes = {
     None = nil,
     Nebula = {
@@ -1283,15 +968,216 @@ task.spawn(function()
     end
 end)
 
--- Hotkey system: blank by default, toggle name -> KeyCode name string
+-- Reload Shuffle (PC only) — equip each gun + refill + preserve/stack reload sounds within 0.3s
+local RELOAD_SHUFFLE_GUNS = { "M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47", "FAL", "Taser" }
+local reloadShuffleBusy = false
+local SoundService = game:GetService("SoundService")
+pcall(function() SoundService.RespectFilteringEnabled = false end)
+
+local ToolPropertiesFolder = nil
+local GunRemotesFolder = nil
+pcall(function()
+    local sm = ReplicatedStorage:FindFirstChild("SharedModules")
+    if sm then ToolPropertiesFolder = sm:FindFirstChild("ToolProperties") end
+end)
+pcall(function()
+    GunRemotesFolder = ReplicatedStorage:FindFirstChild("GunRemotes")
+end)
+
+local toolPropsCache = {}
+local function getToolProps(toolName)
+    if toolPropsCache[toolName] ~= nil then
+        return toolPropsCache[toolName] ~= false and toolPropsCache[toolName] or nil
+    end
+    local props = nil
+    if ToolPropertiesFolder then
+        local mod = ToolPropertiesFolder:FindFirstChild(toolName)
+        if mod then
+            local ok, res = pcall(require, mod)
+            if ok and type(res) == "table" then props = res end
+        end
+    end
+    toolPropsCache[toolName] = props or false
+    return props
+end
+
+local function resolveMaxAmmo(tool)
+    if not tool then return 30 end
+    for _, key in ipairs({ "MaxAmmo", "Local_MaxAmmo", "MagazineSize", "ClipSize", "Capacity" }) do
+        local v = tool:GetAttribute(key)
+        if typeof(v) == "number" and v > 0 then return math.floor(v) end
+    end
+    local props = getToolProps(tool.Name)
+    if props then
+        for _, key in ipairs({ "MaxAmmo", "Ammo", "MagazineSize", "ClipSize", "Capacity", "MaxRounds" }) do
+            local v = props[key]
+            if typeof(v) == "number" and v > 0 then return math.floor(v) end
+        end
+    end
+    local defaults = {
+        ["M9"] = 15, ["Revolver"] = 6, ["Remington 870"] = 6, ["MP5"] = 30,
+        ["M4A1"] = 30, ["M700"] = 5, ["AK-47"] = 30, ["FAL"] = 20, ["Taser"] = 4,
+    }
+    return defaults[tool.Name] or 30
+end
+
+local function playPreservedReloadSounds(tool)
+    if not tool then return end
+    local function clonePlay(snd)
+        if not snd or not snd:IsA("Sound") then return end
+        pcall(function()
+            local c = snd:Clone()
+            c.Name = "SpentReloadPreserve"
+            c.Looped = false
+            c.Parent = workspace.CurrentCamera or workspace
+            c:Play()
+            game:GetService("Debris"):AddItem(c, 6)
+        end)
+    end
+    pcall(function()
+        for _, d in ipairs(tool:GetDescendants()) do
+            if d:IsA("Sound") then
+                local n = d.Name:lower()
+                if n:find("reload") or n:find("shell") or n:find("mag") or n:find("chamber") then
+                    clonePlay(d)
+                end
+            end
+        end
+        -- also fire original briefly so game scripts hear it
+        for _, d in ipairs(tool:GetDescendants()) do
+            if d:IsA("Sound") then
+                local n = d.Name:lower()
+                if n:find("reload") or n:find("shell") or n:find("mag") then
+                    pcall(function() d:Play() end)
+                end
+            end
+        end
+    end)
+    -- animation if present on character
+    pcall(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+        local anims = ReplicatedStorage:FindFirstChild("Animations")
+        if not animator or not anims then return end
+        local anim = anims:FindFirstChild("ReloadMagazine") or anims:FindFirstChild("ReloadShells")
+        if anim and anim:IsA("Animation") then
+            local track = animator:LoadAnimation(anim)
+            track:Play(0.05, 1, 1.8)
+            task.delay(0.35, function() pcall(function() track:Stop() end) end)
+        end
+    end)
+end
+
+local function refillTool(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    local maxAmmo = resolveMaxAmmo(tool)
+    pcall(function()
+        tool:SetAttribute("Local_CurrentAmmo", maxAmmo)
+        tool:SetAttribute("CurrentAmmo", maxAmmo)
+        tool:SetAttribute("Ammo", maxAmmo)
+        tool:SetAttribute("Local_MaxAmmo", maxAmmo)
+        tool:SetAttribute("MaxAmmo", maxAmmo)
+        tool:SetAttribute("Local_ReloadSession", 0)
+        tool:SetAttribute("ReloadSession", 0)
+        tool:SetAttribute("Reloading", false)
+        tool:SetAttribute("IsReloading", false)
+        tool:SetAttribute("Local_Reloading", false)
+        tool:SetAttribute("CanFire", true)
+        tool:SetAttribute("Local_CanFire", true)
+    end)
+    pcall(function()
+        for _, ch in ipairs(tool:GetDescendants()) do
+            local ln = ch.Name:lower()
+            if (ch:IsA("IntValue") or ch:IsA("NumberValue")) and (ln == "ammo" or ln == "currentammo") then
+                ch.Value = maxAmmo
+            end
+        end
+    end)
+    pcall(function() if updateAmmoLabel then updateAmmoLabel(tool, maxAmmo) end end)
+end
+
+local function collectGuns()
+    local list, seen = {}, {}
+    local function add(container)
+        if not container then return end
+        for _, child in ipairs(container:GetChildren()) do
+            if child:IsA("Tool") and table.find(RELOAD_SHUFFLE_GUNS, child.Name) and not seen[child] then
+                seen[child] = true
+                table.insert(list, child)
+            end
+        end
+    end
+    add(LocalPlayer.Character)
+    add(LocalPlayer:FindFirstChild("Backpack"))
+    return list
+end
+
+local function doReloadShuffle()
+    if IS_MOBILE then return end
+    if reloadShuffleBusy then return end
+    reloadShuffleBusy = true
+
+    if not ToolPropertiesFolder then
+        pcall(function()
+            local sm = ReplicatedStorage:FindFirstChild("SharedModules")
+            if sm then ToolPropertiesFolder = sm:FindFirstChild("ToolProperties") end
+        end)
+    end
+
+    local guns = collectGuns()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local n = #guns
+    if n == 0 then
+        reloadShuffleBusy = false
+        notify("No guns to reload")
+        return
+    end
+
+    -- step so full cycle fits in ~0.3s; sounds stacked via preserved clones
+    local step = math.max(0.02, 0.3 / n)
+
+    task.spawn(function()
+        local last = nil
+        for i, tool in ipairs(guns) do
+            if not tool.Parent then continue end
+            -- equip so game reload path / sounds arm
+            pcall(function()
+                if hum then hum:EquipTool(tool) end
+            end)
+            refillTool(tool)
+            playPreservedReloadSounds(tool)
+            last = tool
+            task.wait(step)
+        end
+        -- final pass refill all
+        for _, tool in ipairs(collectGuns()) do
+            refillTool(tool)
+        end
+        reloadShuffleBusy = false
+        notify("Reload Shuffle · " .. tostring(n) .. " guns · 0.3s")
+    end)
+end
+getgenv().SpentReloadShuffle = doReloadShuffle
+
+-- Hotkey system
 SilentAimSettings.Hotkeys = SilentAimSettings.Hotkeys or {}
 local hotkeyActions = {}
 local function registerHotkeyAction(id, fn)
     hotkeyActions[id] = fn
 end
 UserInputService.InputBegan:Connect(function(input, processed)
-    if processed or input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    if IS_MOBILE then return end
     local name = input.KeyCode.Name
+    -- Reload Shuffle: ignore processed so chat/game can't swallow the bind
+    local rs = SilentAimSettings.ReloadShuffleKey
+    if rs and rs ~= "" and rs ~= "None" and name == rs then
+        doReloadShuffle()
+        return
+    end
+    if processed then return end
     for id, keyName in pairs(SilentAimSettings.Hotkeys) do
         if keyName and keyName ~= "" and keyName ~= "None" and keyName == name then
             local fn = hotkeyActions[id]
@@ -1303,7 +1189,7 @@ end)
 getgenv().SilentAimSettings = SilentAimSettings
 
 -- ===================== SPENT HUB UI =====================
-local HUB_ICON_ASSET_ID = 99267227598729
+local HUB_ICON_ASSET_ID = 72635810815367
 
 local function computeWindowSize()
     local cam = workspace.CurrentCamera
@@ -1330,12 +1216,14 @@ local function loadUI()
     pcall(function() loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))() end)
     pcall(function() loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))() end)
 
-    Library.Scheme.AccentColor = Color3.fromRGB(255, 182, 193)
+    Library.Scheme.AccentColor = Color3.fromRGB(255, 182, 193) -- locked pink
     Library.Scheme.BackgroundColor = Color3.fromRGB(10, 13, 18)
     Library.Scheme.MainColor = Color3.fromRGB(18, 22, 30)
     Library.Scheme.OutlineColor = Color3.fromRGB(28, 34, 44)
 
     local winW, winH = computeWindowSize()
+    -- 12% of shorter edge — keep outline inside the window (no outer clip)
+    local cornerR = math.floor(math.min(winW, winH) * 0.12)
     local Window = Library:CreateWindow({
         Title = "SPENT HUB",
         Footer = "SPENT HUB",
@@ -1349,10 +1237,86 @@ local function loadUI()
         Resizable = true,
         SidebarCompacted = true,
         ShowMobileButtons = true,
-        CornerRadius = 10,
+        CornerRadius = cornerR,
         Font = Enum.Font.Gotham,
         ToggleKeybind = Enum.KeyCode.RightShift,
     })
+
+    pcall(function()
+        Library.CornerRadius = cornerR
+        if Library.Corners then
+            for _, c in ipairs(Library.Corners) do
+                if c and c:IsA("UICorner") then
+                    c.CornerRadius = UDim.new(0, cornerR)
+                end
+            end
+        end
+        -- Force main chrome to clip children so strokes/layers never sit outside the outline
+        local root = Library.WindowContainer or Library.MainFrame or Library.Outer
+        if root and root:IsA("GuiObject") then
+            root.ClipsDescendants = true
+            for _, d in ipairs(root:GetDescendants()) do
+                if d:IsA("UIStroke") then
+                    pcall(function()
+                        if d.ApplyStrokeMode ~= nil then
+                            d.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                        end
+                    end)
+                end
+            end
+        end
+        if Library.ScreenGui then
+            for _, d in ipairs(Library.ScreenGui:GetDescendants()) do
+                if d:IsA("Frame") and (d.Name:lower():find("window") or d.Name:lower():find("main") or d.Name:lower():find("outer")) then
+                    d.ClipsDescendants = true
+                end
+            end
+        end
+    end)
+
+    -- Style Library notifications: small original-style corners + pink outline (not the window radius)
+    pcall(function()
+        local function styleNotifyFrame(fr)
+            if not fr or not fr:IsA("GuiObject") then return end
+            for _, c in ipairs(fr:GetChildren()) do
+                if c:IsA("UICorner") then
+                    c.CornerRadius = UDim.new(0, 8) -- original soft radius, not window %
+                end
+            end
+            if not fr:FindFirstChildOfClass("UICorner") then
+                local uc = Instance.new("UICorner")
+                uc.CornerRadius = UDim.new(0, 8)
+                uc.Parent = fr
+            end
+            local st = fr:FindFirstChildOfClass("UIStroke")
+            if not st then
+                st = Instance.new("UIStroke")
+                st.Parent = fr
+            end
+            st.Color = Library.Scheme.AccentColor or Color3.fromRGB(255, 182, 193)
+            st.Thickness = 1.2
+            st.Transparency = 0.25
+        end
+        local oldNotify = Library.Notify
+        if type(oldNotify) == "function" then
+            Library.Notify = function(self, ...)
+                local r = oldNotify(self, ...)
+                task.defer(function()
+                    pcall(function()
+                        local sg = Library.ScreenGui
+                        if not sg then return end
+                        for _, d in ipairs(sg:GetDescendants()) do
+                            local n = d.Name:lower()
+                            if d:IsA("Frame") and (n:find("notif") or n:find("toast") or n:find("prompt")) then
+                                styleNotifyFrame(d)
+                            end
+                        end
+                    end)
+                end)
+                return r
+            end
+        end
+    end)
 
     -- Footer layout: left V1 · middle SPENT HUB (bold) · right made by spent
     task.defer(function()
@@ -1392,7 +1356,8 @@ local function loadUI()
     end
 
     local function setAccent(c)
-        if typeof(c) ~= "Color3" then return end
+        -- accent locked pink forever
+        c = Color3.fromRGB(255, 182, 193)
         Library.Scheme.AccentColor = c
         Library.Scheme.OutlineColor = Color3.new(
             math.clamp(c.R * 0.25 + 0.08, 0, 1),
@@ -1402,8 +1367,6 @@ local function loadUI()
         pcall(function() if Theme then Theme.ACCENT = c end end)
         pcall(function() if mouse_box then mouse_box.Color = c end end)
         SilentAimSettings.ESP_HighlightColor = c
-        SilentAimSettings.TracerColor = c
-        SilentAimSettings.KillEffectColor = c
         pcall(function()
             if Library.UpdateColorsUsingRegistry then Library:UpdateColorsUsingRegistry() end
         end)
@@ -1880,7 +1843,6 @@ local function loadUI()
         local controlRows = {
             { "RightShift", "Toggle menu" },
             { "End", "Unload hub" },
-            { "F (PC)", "Noclip punch" },
             { "Toggle keys", "Blank until you bind" },
         }
         for i, row in ipairs(controlRows) do
@@ -1975,7 +1937,7 @@ local function loadUI()
     end, "SilentAim")
     aim:AddDropdown("SA_Part", {
         Text = "Target Part",
-        Values = { "Head", "HumanoidRootPart", "Random" },
+        Values = { "Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Random" },
         Default = SilentAimSettings.TargetPart,
         Callback = function(v) if typeof(v) == "string" then SilentAimSettings.TargetPart = v end end,
     })
@@ -1997,7 +1959,6 @@ local function loadUI()
     })
     addToggle(aim, "SA_FF", "Forcefield Check", SilentAimSettings.ForcefieldCheck, function(v) SilentAimSettings.ForcefieldCheck = v end)
     addToggleHK(aim, "SA_Auto", "Autoshoot", SilentAimSettings.AutoshootEnabled, function(v) SilentAimSettings.AutoshootEnabled = v end, "Autoshoot")
-    aim:AddLabel("Noclip Punch — F (PC only)")
 
     local filters = Tabs.Main:AddRightGroupbox("Filters / FOV")
     addToggle(filters, "SA_Team", "Team Check", SilentAimSettings.TeamCheck, function(v) SilentAimSettings.TeamCheck = v end)
@@ -2029,40 +1990,37 @@ local function loadUI()
     end
     addMultiList(fs, "FS_Gun", { "M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47" }, SilentAimSettings.FastSwitchList)
 
-    local gun = Tabs.Main:AddRightGroupbox("Gun Mods")
-    addToggle(gun, "GM_On", "Gun Mod", SilentAimSettings.GunModEnabled, function(v)
-        SilentAimSettings.GunModEnabled = v; applyGunModToAllTools()
-    end)
-    addToggle(gun, "GM_AF", "Auto Fire", SilentAimSettings.AutoFire, function(v)
-        SilentAimSettings.AutoFire = v; applyGunModToAllTools()
-    end)
-    addToggle(gun, "GM_FF", "Fast Firerate", SilentAimSettings.FastFirerateEnabled, function(v)
-        SilentAimSettings.FastFirerateEnabled = v; applyGunModToAllTools()
-    end)
-    gun:AddSlider("GM_Rate", {
-        Text = "Firerate x1000",
-        Default = math.floor((SilentAimSettings.FireRateValue or 0.01) * 1000),
-        Min = 1, Max = 100, Rounding = 0,
-        Callback = function(v) SilentAimSettings.FireRateValue = v / 1000; applyGunModToAllTools() end,
+    -- Reload Shuffle (PC only) — keybind only, no enable toggle
+    local rsBox = Tabs.Main:AddRightGroupbox("Reload Shuffle")
+    rsBox:AddLabel("PC only · equip + reload all guns in 0.3s")
+    rsBox:AddLabel("Sounds stack (preserved clones)")
+    local rsHost = rsBox:AddToggle("RS_KeyHost", {
+        Text = "Hotkey (set key → None to clear)",
+        Default = false,
+        Callback = function() end,
     })
-    addToggle(gun, "GM_AR", "Auto Reload", SilentAimSettings.AutoReloadEnabled, function(v)
-        SilentAimSettings.AutoReloadEnabled = v
+    if rsHost and rsHost.AddKeyPicker then
+        rsHost:AddKeyPicker("ReloadShuffle_HK", {
+            Text = "Key",
+            Default = "None",
+            Mode = "Toggle",
+            SyncToggleState = false,
+            ChangedCallback = function(key)
+                local name = typeof(key) == "EnumItem" and key.Name or tostring(key or "None")
+                if name == "" or name == "nil" then name = "None" end
+                SilentAimSettings.ReloadShuffleKey = name
+            end,
+        })
+    end
+    -- hide the host toggle visual if library supports it (key row only)
+    pcall(function()
+        if rsHost and rsHost.SetVisible then rsHost:SetVisible(false) end
     end)
-    gun:AddLabel("Weapon Sound Pack")
-    addExclusiveList(gun, "GM_Pack", { "None", "Silenced Shot", "Bubble Shot", "Laser Shot", "Dart Gun", "Neverlose" },
-        function() return SilentAimSettings.WeaponSoundPack or "None" end,
-        function(v) SilentAimSettings.WeaponSoundPack = v; applySoundPackToAll() end)
+
+
 
     -- PLAYER
     local pl = Tabs.Player:AddLeftGroupbox("Character")
-    addToggleHK(pl, "PL_Noclip", "Noclip", SilentAimSettings.NoclipEnabled, function(v)
-        SilentAimSettings.NoclipEnabled = v
-        if v then startNoclip() else stopNoclip() end
-    end, "Noclip")
-    addToggleHK(pl, "PL_Invis", "Invisible", SilentAimSettings.InvisibleEnabled, function(v)
-        SilentAimSettings.InvisibleEnabled = v
-        if v then startInvisible() else stopInvisible() end
-    end, "Invisible")
     addToggle(pl, "PL_Kor", "Korblox", SilentAimSettings.KorbloxEnabled, function(v)
         SilentAimSettings.KorbloxEnabled = v
         local c = LocalPlayer.Character
@@ -2073,64 +2031,7 @@ local function loadUI()
         local c = LocalPlayer.Character
         if v and c then applyHeadless(c) end
     end)
-    addToggle(pl, "PL_Jump", "Infinite Jump", SilentAimSettings.InfiniteJumpEnabled, function(v)
-        SilentAimSettings.InfiniteJumpEnabled = v
-    end)
-    addToggle(pl, "PL_Stam", "Infinite Stamina", SilentAimSettings.InfiniteStamina, function(v)
-        SilentAimSettings.InfiniteStamina = v
-    end)
-    addToggle(pl, "PL_AntiInv", "Anti-Invisible", SilentAimSettings.AntiInvisibleEnabled, function(v)
-        SilentAimSettings.AntiInvisibleEnabled = v
-    end)
-    addToggle(pl, "PL_Cam", "Custom Camera FOV", SilentAimSettings.CameraFOVEnabled, function(v)
-        SilentAimSettings.CameraFOVEnabled = v
-    end)
-    pl:AddSlider("PL_CamV", {
-        Text = "Camera FOV", Default = 70, Min = 50, Max = 120, Rounding = 0,
-        Callback = function(v) SilentAimSettings.CameraFOV = v end,
-    })
-    pl:AddSlider("PL_Spin", {
-        Text = "Spinbot Speed", Default = 0, Min = 0, Max = 50, Rounding = 0,
-        Callback = function(v) SilentAimSettings.SpinbotSpeed = v end,
-    })
 
-    local hb = Tabs.Player:AddRightGroupbox("Hitbox")
-    addToggle(hb, "HB_On", "Hitbox Expander", SilentAimSettings.HitboxExpanderEnabled, function(v)
-        SilentAimSettings.HitboxExpanderEnabled = v
-    end)
-    addToggle(hb, "HB_Team", "Hitbox Team Check", SilentAimSettings.HitboxTeamCheck, function(v)
-        SilentAimSettings.HitboxTeamCheck = v
-    end)
-    hb:AddSlider("HB_Size", {
-        Text = "Hitbox Size", Default = 5, Min = 1, Max = 25, Rounding = 1,
-        Callback = function(v) SilentAimSettings.HitboxSize = v end,
-    })
-    hb:AddSlider("HB_Tr", {
-        Text = "Transparency x100", Default = 50, Min = 0, Max = 100, Rounding = 0,
-        Callback = function(v) SilentAimSettings.HitboxTransparency = v / 100 end,
-    })
-    hb:AddDropdown("HB_Sh", {
-        Text = "Shape",
-        Values = { "Box", "Ball" },
-        Default = SilentAimSettings.HitboxShape or "Box",
-        Callback = function(v) if typeof(v) == "string" then SilentAimSettings.HitboxShape = v end end,
-    })
-
-    local we = Tabs.Player:AddLeftGroupbox("Weapons / TP")
-    we:AddLabel("Weapons to Get")
-    if typeof(SilentAimSettings.GetWeaponsList) ~= "table" then
-        SilentAimSettings.GetWeaponsList = { "M9", "AK-47", "M4A1", "Remington 870", "M700", "MP5", "Revolver" }
-    end
-    addMultiList(we, "GetW", { "M9", "Revolver", "AK-47", "M4A1", "MP5", "Remington 870", "M700", "FAL", "Taser" }, SilentAimSettings.GetWeaponsList)
-    we:AddButton({ Text = "Get Weapons", Func = function() if getgenv().GetWeapons then getgenv().GetWeapons() end end })
-    addToggle(we, "AutoGet", "Auto Get Weapons", SilentAimSettings.AutoGetWeapons, function(v)
-        SilentAimSettings.AutoGetWeapons = v
-    end)
-    we:AddButton({ Text = "TP Criminal Base", Func = function() getgenv().SpentTeleports.CriminalBase() end })
-    we:AddButton({ Text = "TP Yard", Func = function() getgenv().SpentTeleports.Yard() end })
-    we:AddButton({ Text = "TP Cafeteria", Func = function() getgenv().SpentTeleports.Cafeteria() end })
-    we:AddButton({ Text = "TP Gate", Func = function() getgenv().SpentTeleports.Gate() end })
-    we:AddButton({ Text = "TP Armory", Func = function() getgenv().SpentTeleports.Armory() end })
 
     -- VISUALS
     local esp = Tabs.Visuals:AddLeftGroupbox("ESP")
@@ -2145,26 +2046,6 @@ local function loadUI()
         Callback = function(v) SilentAimSettings.ESP_MaxDistance = v end,
     })
 
-    local tr = Tabs.Visuals:AddRightGroupbox("Tracers / FX")
-    addToggle(tr, "BeamOn", "Tracer Beams", SilentAimSettings.TracerESPEnabled, function(v) SilentAimSettings.TracerESPEnabled = v end)
-    addToggle(tr, "BeamT", "Tracer Target Only", SilentAimSettings.TracerTargetOnly, function(v) SilentAimSettings.TracerTargetOnly = v end)
-    tr:AddSlider("BeamW", {
-        Text = "Thickness x100", Default = 15, Min = 5, Max = 50, Rounding = 0,
-        Callback = function(v) SilentAimSettings.TracerThickness = v / 100 end,
-    })
-    addToggle(tr, "KillFX", "Kill Effect", SilentAimSettings.KillEffectEnabled, function(v) SilentAimSettings.KillEffectEnabled = v end)
-    addToggle(tr, "KillLog", "Kill Logs", SilentAimSettings.KillLogsEnabled, function(v) SilentAimSettings.KillLogsEnabled = v end)
-    addToggle(tr, "HitLog", "Hit Logs", SilentAimSettings.HitLogsEnabled, function(v) SilentAimSettings.HitLogsEnabled = v end)
-    addToggle(tr, "HitSnd", "Custom Hit Sound", SilentAimSettings.CustomHitSoundEnabled, function(v) SilentAimSettings.CustomHitSoundEnabled = v end)
-    tr:AddLabel("Hit Sound")
-    addExclusiveList(tr, "HitSnd", { "TF2 Hit", "Neverlose", "Minecraft Hit 1", "MLG Hit", "Rust", "Skeet", "Fatality" },
-        function() return SilentAimSettings.HitSoundName or "Neverlose" end,
-        function(v) SilentAimSettings.HitSoundName = v end)
-    addToggle(tr, "KillSnd", "Custom Kill Sound", SilentAimSettings.CustomKillSoundEnabled, function(v) SilentAimSettings.CustomKillSoundEnabled = v end)
-    tr:AddLabel("Kill Sound")
-    addExclusiveList(tr, "KillSnd", { "Fahhh", "Vine Boom", "CoD Kaboom", "Laugh", "iPhone Ding", "Creepy Bell" },
-        function() return SilentAimSettings.KillSoundName or "Vine Boom" end,
-        function(v) SilentAimSettings.KillSoundName = v end)
 
     -- WORLD
     local world = Tabs.World:AddLeftGroupbox("Environment")
@@ -2184,28 +2065,7 @@ local function loadUI()
         SilentAimSettings.WorldGradient = v; applyWorldGradient()
     end)
 
-    -- SETTINGS accent + unload
-    local accentBox = Tabs.Settings:AddLeftGroupbox("Accent Color")
-    if accentBox.AddColorPicker then
-        accentBox:AddColorPicker("AccentPicker", {
-            Text = "Accent / Outlines",
-            Default = Library.Scheme.AccentColor,
-            Callback = function(c) setAccent(c) end,
-        })
-    end
-    for _, e in ipairs({
-        { "Pink", Color3.fromRGB(255, 182, 193) },
-        { "Blue", Color3.fromRGB(140, 180, 255) },
-        { "Green", Color3.fromRGB(140, 255, 180) },
-        { "Purple", Color3.fromRGB(200, 140, 255) },
-        { "Red", Color3.fromRGB(255, 100, 120) },
-        { "Orange", Color3.fromRGB(255, 170, 90) },
-        { "Cyan", Color3.fromRGB(100, 230, 255) },
-        { "White", Color3.fromRGB(235, 235, 245) },
-    }) do
-        accentBox:AddButton({ Text = e[1], Func = function() setAccent(e[2]) end })
-    end
-
+    -- SETTINGS (accent locked pink)
     local menu = Tabs.Settings:AddLeftGroupbox("Menu")
     menu:AddLabel("Menu toggle: RightShift")
     menu:AddLabel("Hotkeys start blank — set on each toggle")
@@ -2226,29 +2086,72 @@ end
 
 Library = loadUI()
 
+-- Floating open button (icon) — Precision-style toggle
+task.defer(function()
+    pcall(function()
+        local pg = LocalPlayer:WaitForChild("PlayerGui", 10)
+        if not pg then return end
+        local old = pg:FindFirstChild("SpentHubOpenBtn")
+        if old then old:Destroy() end
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "SpentHubOpenBtn"
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.DisplayOrder = 150
+        gui.Parent = pg
+        local btn = Instance.new("ImageButton")
+        btn.Name = "Open"
+        btn.Size = UDim2.fromOffset(44, 44)
+        btn.Position = UDim2.new(0, 12, 0.5, -22)
+        btn.BackgroundColor3 = Color3.fromRGB(18, 22, 30)
+        btn.BackgroundTransparency = 0.15
+        btn.Image = "rbxassetid://72635810815367"
+        btn.ScaleType = Enum.ScaleType.Fit
+        btn.Parent = gui
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 10)
+        c.Parent = btn
+        local st = Instance.new("UIStroke")
+        st.Color = Color3.fromRGB(255, 182, 193)
+        st.Thickness = 1.2
+        st.Transparency = 0.25
+        st.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if getgenv().SpentToggleMenu then
+                getgenv().SpentToggleMenu()
+            elseif Library and Library.Toggle then
+                pcall(function() Library:Toggle() end)
+            end
+        end)
+    end)
+end)
+
+
 
 local espData = {}
 local ESP_LOGIC_INTERVAL = 0.05
 
 local function createESPData()
     local d = {}
-    d.name = Drawing.new("Text")
+    d.hasDrawing = HAS_DRAWING
+    -- use _mkDraw polyfill (same as FOV/cursor) so weak executors don't hard-error
+    d.name = _mkDraw("Text")
     d.name.Visible = false
     d.name.Font = 2
     d.name.Center = true
     d.name.Outline = true
     d.name.ZIndex = 10
-    d.hpbarbg = Drawing.new("Square")
+    d.hpbarbg = _mkDraw("Square")
     d.hpbarbg.Visible = false
     d.hpbarbg.Filled = true
     d.hpbarbg.Thickness = 0
     d.hpbarbg.ZIndex = 10
-    d.hpbar = Drawing.new("Square")
+    d.hpbar = _mkDraw("Square")
     d.hpbar.Visible = false
     d.hpbar.Filled = true
     d.hpbar.Thickness = 0
     d.hpbar.ZIndex = 11
-    d.trace = Drawing.new("Line")
+    d.trace = _mkDraw("Line")
     d.trace.Visible = false
     d.trace.ZIndex = 9
     d.trace.Thickness = 1
@@ -2422,43 +2325,51 @@ end)
 
 local function spentToggleMenu()
     local lib = Library or getgenv().Library
-    if not lib then return end
-    -- Obsidian / Linoria style APIs
-    local ok = false
-    ok = pcall(function()
-        if type(lib.Toggle) == "function" then
-            lib:Toggle()
-            return true
-        end
-    end) and true or ok
-    if not ok then
+    local toggled = false
+    if lib then
         pcall(function()
-            if lib.Toggled ~= nil then
-                lib.Toggled = not lib.Toggled
-                ok = true
+            if type(lib.Toggle) == "function" then
+                lib:Toggle()
+                toggled = true
+            end
+        end)
+        if not toggled then
+            pcall(function()
+                if lib.Toggled ~= nil then
+                    lib.Toggled = not lib.Toggled
+                    toggled = true
+                end
+            end)
+        end
+        pcall(function()
+            if lib.ScreenGui then
+                lib.ScreenGui.Enabled = not lib.ScreenGui.Enabled
+                toggled = true
+            end
+        end)
+        pcall(function()
+            for _, key in ipairs({ "WindowContainer", "MainFrame", "Outer", "Window", "Holder" }) do
+                local root = lib[key]
+                if root and typeof(root) == "Instance" and root:IsA("GuiObject") then
+                    root.Visible = not root.Visible
+                    toggled = true
+                end
             end
         end)
     end
-    pcall(function()
-        if lib.ScreenGui then
-            lib.ScreenGui.Enabled = not lib.ScreenGui.Enabled
-            ok = true
-        end
-    end)
-    pcall(function()
-        local root = lib.WindowContainer or lib.MainFrame or lib.Outer
-        if root and root:IsA("GuiObject") then
-            root.Visible = not root.Visible
-            ok = true
-        end
-    end)
-    -- last resort: any ScreenGui named like Obsidian/Spent
+    -- last resort: PlayerGui scan
     pcall(function()
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         if not pg then return end
         for _, g in ipairs(pg:GetChildren()) do
-            if g:IsA("ScreenGui") and (g.Name:lower():find("obsidian") or g.Name:lower():find("library") or g.Name:lower():find("spent")) then
-                g.Enabled = not g.Enabled
+            if g:IsA("ScreenGui") then
+                local n = g.Name:lower()
+                if n:find("obsidian") or n:find("library") or n:find("spent") or n:find("hub") then
+                    if g.Name ~= "SpentHubStartup" and g.Name ~= "SpentHubCursor" and g.Name ~= "SpentKillFX" then
+                        g.Enabled = not g.Enabled
+                        toggled = true
+                    end
+                end
             end
         end
     end)
@@ -2512,9 +2423,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
     -- remaining keys respect processed (game chat etc.)
     if processed then return end
 
-    if input.KeyCode == Enum.KeyCode.F and not IS_MOBILE then
-        doNoclipPunch()
-    end
 end)
 
 task.spawn(function()
