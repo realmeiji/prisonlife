@@ -916,25 +916,11 @@ end)
 local Library = nil
 local function notify(text, color)
     text = tostring(text)
-    local ok = false
     pcall(function()
-        if Luna and Luna.Notification then
-            Luna:Notification({
-                Title = "SPENT HUB",
-                Content = text,
-                Icon = "notifications",
-                ImageSource = "Material",
-            })
-            ok = true
+        if Library and Library.Notify then
+            Library:Notify({ Title = "SPENT HUB", Description = text, Time = 3 })
         end
     end)
-    if not ok then
-        pcall(function()
-            if Library and Library.Notify then
-                Library:Notify({ Title = "SPENT HUB", Description = text, Time = 3 })
-            end
-        end)
-    end
     print("[SPENT HUB]", text)
 end
 
@@ -1220,282 +1206,333 @@ local function computeWindowSize()
 end
 
 local function loadUI()
-    -- Luna Interface Suite (Lunaria design)
-    local urls = {
-        "https://raw.githubusercontent.com/Nebula-Softworks/Luna-Interface-Suite/main/source.lua",
-        "https://raw.githubusercontent.com/Nebula-Softworks/Luna-Interface-Suite/master/source.lua",
-        "https://raw.githubusercontent.com/Snxdfer/back-ups-for-libs/refs/heads/main/Luna_Source.lua",
-    }
-    local LunaLib = nil
-    for _, url in ipairs(urls) do
-        local ok, res = pcall(function()
-            return loadstring(game:HttpGet(url))()
+    -- Obsidian by deividcomsono
+    local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+    local ok, Lib = pcall(function()
+        return loadstring(game:HttpGet(repo .. "Library.lua"))()
+    end)
+    if not ok or not Lib then
+        -- fallback refs/heads path
+        ok, Lib = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
         end)
-        if ok and res then
-            LunaLib = res
-            break
-        end
     end
-    if not LunaLib then
-        warn("[SPENT HUB] Luna UI failed to load")
+    if not ok or not Lib then
+        warn("[SPENT HUB] Obsidian UI failed to load")
         return nil
     end
-    Luna = LunaLib
-    getgenv().Luna = Luna
-    Library = Luna -- bridge for unload/toggle helpers
+    Library = Lib
     getgenv().Library = Library
+    pcall(function() loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))() end)
+    pcall(function() loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))() end)
 
-    local Window = Luna:CreateWindow({
-        Name = "SPENT HUB",
-        Subtitle = "made by spent · V1",
-        LogoID = tostring(HUB_ICON_ASSET_ID),
-        LoadingEnabled = true,
-        LoadingTitle = "SPENT HUB",
-        LoadingSubtitle = "made by spent",
-        ConfigSettings = {
-            ConfigFolder = "SpentHub",
-        },
-        KeySystem = false,
-    })
-
-    -- light pink accent on strokes after load
-    task.defer(function()
-        pcall(function()
-            local pink = Color3.fromRGB(255, 192, 203)
-            local root = gethui and gethui() or (LocalPlayer:FindFirstChild("PlayerGui"))
-            if not root then return end
-            for _, d in ipairs(root:GetDescendants()) do
-                if d:IsA("UIStroke") then
-                    pcall(function()
-                        d.Color = pink
-                        d.Transparency = math.min(d.Transparency, 0.25)
-                    end)
-                end
-            end
-        end)
+    -- locked light pink accent
+    pcall(function()
+        if Library.Scheme then
+            Library.Scheme.AccentColor = Color3.fromRGB(255, 182, 193)
+            Library.Scheme.BackgroundColor = Color3.fromRGB(12, 12, 16)
+            Library.Scheme.MainColor = Color3.fromRGB(18, 18, 24)
+            Library.Scheme.OutlineColor = Color3.fromRGB(255, 192, 203)
+        end
     end)
 
-    local TabMain = Window:CreateTab({ Name = "Main", Icon = "swords", ImageSource = "Material" })
-    local TabPlayer = Window:CreateTab({ Name = "Player", Icon = "person", ImageSource = "Material" })
-    local TabVisuals = Window:CreateTab({ Name = "Visuals", Icon = "visibility", ImageSource = "Material" })
-    local TabWorld = Window:CreateTab({ Name = "World", Icon = "public", ImageSource = "Material" })
-    local TabInfo = Window:CreateTab({ Name = "Info", Icon = "info", ImageSource = "Material" })
-    local TabSettings = Window:CreateTab({ Name = "Settings", Icon = "settings", ImageSource = "Material" })
+    local winW, winH = 820, 520
+    pcall(function()
+        if computeWindowSize then
+            winW, winH = computeWindowSize()
+        end
+    end)
 
-    -- helpers
-    local function addToggle(parent, name, default, cb, flag)
-        return parent:CreateToggle({
-            Name = name,
-            CurrentValue = default and true or false,
-            Callback = function(v) if cb then cb(v) end end,
-        }, flag or name)
-    end
-    local function addSlider(parent, name, default, min, max, inc, cb, flag)
-        return parent:CreateSlider({
-            Name = name,
-            Range = { min, max },
-            Increment = inc or 1,
-            CurrentValue = default,
-            Callback = function(v) if cb then cb(v) end end,
-        }, flag or name)
-    end
-    local function addDropdown(parent, name, values, default, cb, flag)
-        return parent:CreateDropdown({
-            Name = name,
-            Options = values,
-            CurrentOption = { default },
-            MultipleOptions = false,
-            Callback = function(opt)
-                local v = opt
-                if typeof(opt) == "table" then v = opt[1] or opt end
-                if cb and typeof(v) == "string" then cb(v) end
+    local Window = Library:CreateWindow({
+        Title = "SPENT HUB",
+        Footer = "V1 · made by spent",
+        Icon = HUB_ICON_ASSET_ID,
+        NotifySide = "Right",
+        ShowCustomCursor = false,
+        Size = UDim2.fromOffset(winW, winH),
+        Center = true,
+        AutoShow = true,
+        Resizable = true,
+        ShowMobileButtons = true,
+        ToggleKeybind = Enum.KeyCode.RightShift,
+        Font = Enum.Font.Gotham,
+    })
+
+    pcall(function()
+        Library.ToggleKeybind = Enum.KeyCode.RightShift
+    end)
+
+    local Tabs = {
+        Main = Window:AddTab("Main", "crosshair"),
+        Player = Window:AddTab("Player", "user"),
+        Visuals = Window:AddTab("Visuals", "eye"),
+        World = Window:AddTab("World", "globe"),
+        Info = Window:AddTab("Info", "info"),
+        Settings = Window:AddTab("Settings", "settings"),
+    }
+
+    -- ===== helpers (Obsidian) =====
+    local function addToggle(group, idx, text, default, onChange)
+        return group:AddToggle(idx, {
+            Text = text,
+            Default = default and true or false,
+            Callback = function(v)
+                if onChange then onChange(v) end
             end,
-        }, flag or name)
-    end
-    local function addBind(parent, name, current, onChanged, onPress, flag)
-        local cur = current
-        if cur == nil or cur == "" or cur == "None" then cur = "Unknown" end
-        return parent:CreateBind({
-            Name = name,
-            CurrentBind = cur,
-            HoldToInteract = false,
-            Callback = function(state)
-                if onPress then onPress(state) end
-            end,
-            OnChangedCallback = function(key)
-                local nameKey = typeof(key) == "EnumItem" and key.Name or tostring(key or "None")
-                if nameKey == "" or nameKey == "nil" or nameKey == "Unknown" then nameKey = "None" end
-                if onChanged then onChanged(nameKey) end
-            end,
-        }, flag or name)
+        })
     end
 
-    -- ===== MAIN / AIM =====
-    TabMain:CreateSection("Silent Aim")
-    addToggle(TabMain, "Silent Aim", SilentAimSettings.Enabled, function(v)
+    local function addToggleHK(group, idx, text, default, onChange, hotkeyId)
+        local tog = group:AddToggle(idx, {
+            Text = text,
+            Default = default and true or false,
+            Callback = function(v)
+                if onChange then onChange(v) end
+            end,
+        })
+        if tog and tog.AddKeyPicker and hotkeyId then
+            SilentAimSettings.Hotkeys = SilentAimSettings.Hotkeys or {}
+            SilentAimSettings.Hotkeys[hotkeyId] = SilentAimSettings.Hotkeys[hotkeyId] or "None"
+            tog:AddKeyPicker(idx .. "_HK", {
+                Text = "Key",
+                Default = SilentAimSettings.Hotkeys[hotkeyId] ~= "None" and SilentAimSettings.Hotkeys[hotkeyId] or "None",
+                Mode = "Toggle",
+                SyncToggleState = false,
+                ChangedCallback = function(key)
+                    local name = typeof(key) == "EnumItem" and key.Name or tostring(key or "None")
+                    if name == "" or name == "nil" then name = "None" end
+                    SilentAimSettings.Hotkeys[hotkeyId] = name
+                    registerHotkeyAction(hotkeyId, function()
+                        local t = Library and Library.Toggles and Library.Toggles[idx]
+                        local newVal = not SilentAimSettings.Enabled
+                        -- resolve by hotkeyId
+                        if hotkeyId == "SilentAim" then
+                            SilentAimSettings.Enabled = not SilentAimSettings.Enabled
+                            if t and t.SetValue then t:SetValue(SilentAimSettings.Enabled) end
+                            notify("Silent Aim " .. (SilentAimSettings.Enabled and "on" or "off"))
+                        elseif hotkeyId == "Autoshoot" then
+                            SilentAimSettings.AutoshootEnabled = not SilentAimSettings.AutoshootEnabled
+                            if t and t.SetValue then t:SetValue(SilentAimSettings.AutoshootEnabled) end
+                            notify("Autoshoot " .. (SilentAimSettings.AutoshootEnabled and "on" or "off"))
+                        elseif hotkeyId == "FastSwitch" then
+                            SilentAimSettings.FastSwitchEnabled = not SilentAimSettings.FastSwitchEnabled
+                            if SilentAimSettings.FastSwitchEnabled then startFastSwitch() else stopFastSwitch() end
+                            if t and t.SetValue then t:SetValue(SilentAimSettings.FastSwitchEnabled) end
+                            pcall(function() if getgenv().SpentFastSwitchMobilePaint then getgenv().SpentFastSwitchMobilePaint() end end)
+                            notify("Fast Switch " .. (SilentAimSettings.FastSwitchEnabled and "on" or "off"))
+                        elseif hotkeyId == "ESP" then
+                            SilentAimSettings.ESP_Enabled = not SilentAimSettings.ESP_Enabled
+                            if t and t.SetValue then t:SetValue(SilentAimSettings.ESP_Enabled) end
+                            notify("ESP " .. (SilentAimSettings.ESP_Enabled and "on" or "off"))
+                        end
+                    end)
+                end,
+            })
+        end
+        return tog
+    end
+
+    local function addMultiList(group, prefix, names, listRef)
+        for _, gun in ipairs(names) do
+            local idx = prefix .. "_" .. gun:gsub("%s+", "_")
+            group:AddToggle(idx, {
+                Text = gun,
+                Default = table.find(listRef, gun) ~= nil,
+                Callback = function(v)
+                    if v then
+                        if not table.find(listRef, gun) then table.insert(listRef, gun) end
+                    else
+                        local i = table.find(listRef, gun)
+                        if i then table.remove(listRef, i) end
+                    end
+                end,
+            })
+        end
+    end
+
+    -- ===== MAIN =====
+    local aim = Tabs.Main:AddLeftGroupbox("Silent Aim")
+    addToggleHK(aim, "SA_Enabled", "Silent Aim", SilentAimSettings.Enabled, function(v)
         SilentAimSettings.Enabled = v
         notify("Silent Aim " .. (v and "on" or "off"))
-    end, "SA_Enabled")
-    addBind(TabMain, "Silent Aim Key", SilentAimSettings.Hotkeys["SilentAim"] or "None", function(k)
-        SilentAimSettings.Hotkeys["SilentAim"] = k
-        registerHotkeyAction("SilentAim", function()
-            SilentAimSettings.Enabled = not SilentAimSettings.Enabled
-            notify("Silent Aim " .. (SilentAimSettings.Enabled and "on" or "off"))
-        end)
-    end, nil, "SA_Enabled_HK")
+    end, "SilentAim")
 
-    addDropdown(TabMain, "Target Part", {
-        "Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Random"
-    }, SilentAimSettings.TargetPart or "HumanoidRootPart", function(v)
-        SilentAimSettings.TargetPart = v
-    end, "SA_Part")
-
-    addDropdown(TabMain, "Silent Aim Method", {
-        "Raycast", "FindPartOnRayWithIgnoreList", "FindPartOnRayWithWhitelist", "FindPartOnRay", "Mouse.Hit/Target"
-    }, SilentAimSettings.SilentAimMethod or "Raycast", function(v)
-        SilentAimSettings.SilentAimMethod = v
-    end, "SA_Method")
-
-    addDropdown(TabMain, "Target Mode", { "Manual", "Hostile", "Trespassing" },
-        SilentAimSettings.TargetingMode or "Manual", function(v)
-        SilentAimSettings.TargetingMode = v
-    end, "SA_TargetMode")
-
-    addSlider(TabMain, "Hit Chance", SilentAimSettings.HitChance or 100, 0, 100, 1, function(v)
-        SilentAimSettings.HitChance = v
-    end, "SA_Hit")
-
-    addToggle(TabMain, "Forcefield Check", SilentAimSettings.ForcefieldCheck, function(v)
+    aim:AddDropdown("SA_Part", {
+        Text = "Target Part",
+        Values = { "Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Random" },
+        Default = SilentAimSettings.TargetPart or "HumanoidRootPart",
+        Callback = function(v) if typeof(v) == "string" then SilentAimSettings.TargetPart = v end end,
+    })
+    aim:AddDropdown("SA_Method", {
+        Text = "Method",
+        Values = { "Raycast", "FindPartOnRayWithIgnoreList", "FindPartOnRayWithWhitelist", "FindPartOnRay", "Mouse.Hit/Target" },
+        Default = SilentAimSettings.SilentAimMethod or "Raycast",
+        Callback = function(v) if typeof(v) == "string" then SilentAimSettings.SilentAimMethod = v end end,
+    })
+    aim:AddDropdown("SA_TargetMode", {
+        Text = "Target Mode",
+        Values = { "Manual", "Hostile", "Trespassing" },
+        Default = SilentAimSettings.TargetingMode or "Manual",
+        Callback = function(v) if typeof(v) == "string" then SilentAimSettings.TargetingMode = v end end,
+    })
+    aim:AddSlider("SA_Hit", {
+        Text = "Hit Chance",
+        Default = SilentAimSettings.HitChance or 100,
+        Min = 0, Max = 100, Rounding = 0,
+        Callback = function(v) SilentAimSettings.HitChance = v end,
+    })
+    addToggle(aim, "SA_FF", "Forcefield Check", SilentAimSettings.ForcefieldCheck, function(v)
         SilentAimSettings.ForcefieldCheck = v
-    end, "SA_FF")
-
-    addToggle(TabMain, "Autoshoot", SilentAimSettings.AutoshootEnabled, function(v)
+    end)
+    addToggleHK(aim, "SA_Auto", "Autoshoot", SilentAimSettings.AutoshootEnabled, function(v)
         SilentAimSettings.AutoshootEnabled = v
-    end, "SA_Auto")
-    addBind(TabMain, "Autoshoot Key", SilentAimSettings.Hotkeys["Autoshoot"] or "None", function(k)
-        SilentAimSettings.Hotkeys["Autoshoot"] = k
-        registerHotkeyAction("Autoshoot", function()
-            SilentAimSettings.AutoshootEnabled = not SilentAimSettings.AutoshootEnabled
-            notify("Autoshoot " .. (SilentAimSettings.AutoshootEnabled and "on" or "off"))
-        end)
-    end, nil, "SA_Auto_HK")
-
-    TabMain:CreateSection("Filters / FOV")
-    addToggle(TabMain, "Team Check", SilentAimSettings.TeamCheck, function(v) SilentAimSettings.TeamCheck = v end, "SA_Team")
-    addToggle(TabMain, "Visible Check", SilentAimSettings.VisibleCheck, function(v) SilentAimSettings.VisibleCheck = v end, "SA_Vis")
-    addToggle(TabMain, "Target Cop", SilentAimSettings.TargetCop, function(v) SilentAimSettings.TargetCop = v end, "SA_Cop")
-    addToggle(TabMain, "Target Inmate", SilentAimSettings.TargetInmate, function(v) SilentAimSettings.TargetInmate = v end, "SA_Inm")
-    addToggle(TabMain, "Target Criminal", SilentAimSettings.TargetCriminal, function(v) SilentAimSettings.TargetCriminal = v end, "SA_Cri")
-    addToggle(TabMain, "FOV Circle", SilentAimSettings.FOVVisible, function(v) SilentAimSettings.FOVVisible = v end, "FOV_On")
-    addToggle(TabMain, "Center FOV", SilentAimSettings.FOVCenter, function(v) SilentAimSettings.FOVCenter = v end, "FOV_Ctr")
-    addSlider(TabMain, "FOV Radius", SilentAimSettings.FOVRadius or 130, 0, 400, 1, function(v)
-        SilentAimSettings.FOVRadius = v
-    end, "FOV_Sz")
-    addToggle(TabMain, "Show Target Box", SilentAimSettings.ShowSilentAimTarget, function(v)
+    end, "Autoshoot")
+    addToggle(aim, "SA_Box", "Show Target Box", SilentAimSettings.ShowSilentAimTarget, function(v)
         SilentAimSettings.ShowSilentAimTarget = v
-    end, "SA_Box")
+    end)
 
-    TabMain:CreateSection("Fast Switch")
-    addToggle(TabMain, "Fast Switch", SilentAimSettings.FastSwitchEnabled, function(v)
+    local filters = Tabs.Main:AddRightGroupbox("Filters / FOV")
+    addToggle(filters, "SA_Team", "Team Check", SilentAimSettings.TeamCheck, function(v) SilentAimSettings.TeamCheck = v end)
+    addToggle(filters, "SA_Vis", "Visible Check", SilentAimSettings.VisibleCheck, function(v) SilentAimSettings.VisibleCheck = v end)
+    addToggle(filters, "SA_Cop", "Target Cop", SilentAimSettings.TargetCop, function(v) SilentAimSettings.TargetCop = v end)
+    addToggle(filters, "SA_Inm", "Target Inmate", SilentAimSettings.TargetInmate, function(v) SilentAimSettings.TargetInmate = v end)
+    addToggle(filters, "SA_Cri", "Target Criminal", SilentAimSettings.TargetCriminal, function(v) SilentAimSettings.TargetCriminal = v end)
+    addToggle(filters, "FOV_On", "FOV Circle", SilentAimSettings.FOVVisible, function(v) SilentAimSettings.FOVVisible = v end)
+    addToggle(filters, "FOV_Ctr", "Center FOV", SilentAimSettings.FOVCenter, function(v) SilentAimSettings.FOVCenter = v end)
+    filters:AddSlider("FOV_Sz", {
+        Text = "FOV Radius",
+        Default = SilentAimSettings.FOVRadius or 130,
+        Min = 0, Max = 400, Rounding = 0,
+        Callback = function(v) SilentAimSettings.FOVRadius = v end,
+    })
+
+    local fs = Tabs.Main:AddLeftGroupbox("Fast Switch")
+    addToggleHK(fs, "FS_On", "Fast Switch", SilentAimSettings.FastSwitchEnabled, function(v)
         SilentAimSettings.FastSwitchEnabled = v
         if v then startFastSwitch() else stopFastSwitch() end
         pcall(function() if getgenv().SpentFastSwitchMobilePaint then getgenv().SpentFastSwitchMobilePaint() end end)
-    end, "FS_On")
-    addBind(TabMain, "Fast Switch Key", SilentAimSettings.Hotkeys["FastSwitch"] or "None", function(k)
-        SilentAimSettings.Hotkeys["FastSwitch"] = k
-        registerHotkeyAction("FastSwitch", function()
-            SilentAimSettings.FastSwitchEnabled = not SilentAimSettings.FastSwitchEnabled
-            if SilentAimSettings.FastSwitchEnabled then startFastSwitch() else stopFastSwitch() end
-            pcall(function() if getgenv().SpentFastSwitchMobilePaint then getgenv().SpentFastSwitchMobilePaint() end end)
-            notify("Fast Switch " .. (SilentAimSettings.FastSwitchEnabled and "on" or "off"))
-        end)
-    end, nil, "FS_On_HK")
-    addSlider(TabMain, "Switch Speed x100", math.floor((SilentAimSettings.FastSwitchDelay or 0.05) * 100), 1, 50, 1, function(v)
-        SilentAimSettings.FastSwitchDelay = v / 100
-    end, "FS_Delay")
-    TabMain:CreateLabel({ Text = "Guns cycle: M9 · Revolver · 870 · MP5 · M4A1 · M700 · AK-47" })
+    end, "FastSwitch")
+    fs:AddSlider("FS_Delay", {
+        Text = "Switch Speed x100",
+        Default = math.floor((SilentAimSettings.FastSwitchDelay or 0.05) * 100),
+        Min = 1, Max = 50, Rounding = 0,
+        Callback = function(v) SilentAimSettings.FastSwitchDelay = v / 100 end,
+    })
+    fs:AddLabel("Guns to Cycle")
+    if typeof(SilentAimSettings.FastSwitchList) ~= "table" then
+        SilentAimSettings.FastSwitchList = { "M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47" }
+    end
+    addMultiList(fs, "FS_Gun", { "M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47" }, SilentAimSettings.FastSwitchList)
 
-    TabMain:CreateSection("Reload Shuffle (PC)")
-    TabMain:CreateLabel({ Text = "PC only · equip + reload all guns in 0.3s · stacked sounds" })
-    addBind(TabMain, "Reload Shuffle Key", SilentAimSettings.ReloadShuffleKey or "None", function(k)
-        SilentAimSettings.ReloadShuffleKey = k
-    end, nil, "ReloadShuffle_HK")
-    -- press handled in InputBegan via ReloadShuffleKey (no double-fire)
-
-    -- ===== PLAYER =====
-    TabPlayer:CreateSection("Character")
-    addToggle(TabPlayer, "Korblox", SilentAimSettings.KorbloxEnabled, function(v)
-        SilentAimSettings.KorbloxEnabled = v
-        local c = LocalPlayer.Character
-        if v and c then applyKorblox(c) end
-    end, "PL_Kor")
-    addToggle(TabPlayer, "Headless", SilentAimSettings.HeadlessEnabled, function(v)
-        SilentAimSettings.HeadlessEnabled = v
-        local c = LocalPlayer.Character
-        if v and c then applyHeadless(c) end
-    end, "PL_Head")
-
-    -- ===== VISUALS =====
-    TabVisuals:CreateSection("ESP")
-    addToggle(TabVisuals, "Enable ESP", SilentAimSettings.ESP_Enabled, function(v)
-        SilentAimSettings.ESP_Enabled = v
-    end, "ESP_On")
-    addBind(TabVisuals, "ESP Key", SilentAimSettings.Hotkeys["ESP"] or "None", function(k)
-        SilentAimSettings.Hotkeys["ESP"] = k
-        registerHotkeyAction("ESP", function()
-            SilentAimSettings.ESP_Enabled = not SilentAimSettings.ESP_Enabled
-            notify("ESP " .. (SilentAimSettings.ESP_Enabled and "on" or "off"))
-        end)
-    end, nil, "ESP_On_HK")
-    addToggle(TabVisuals, "Team Colors", SilentAimSettings.ESP_Team, function(v) SilentAimSettings.ESP_Team = v end, "ESP_Team")
-    addToggle(TabVisuals, "Highlight", SilentAimSettings.ESP_Highlight, function(v) SilentAimSettings.ESP_Highlight = v end, "ESP_HL")
-    addToggle(TabVisuals, "Names", SilentAimSettings.ESP_Name, function(v) SilentAimSettings.ESP_Name = v end, "ESP_Name")
-    addToggle(TabVisuals, "Health Bar", SilentAimSettings.ESP_Health, function(v) SilentAimSettings.ESP_Health = v end, "ESP_HP")
-    addToggle(TabVisuals, "Trace Line", SilentAimSettings.ESP_Trace, function(v) SilentAimSettings.ESP_Trace = v end, "ESP_Tr")
-    addSlider(TabVisuals, "Max Distance", SilentAimSettings.ESP_MaxDistance or 1500, 100, 3000, 10, function(v)
-        SilentAimSettings.ESP_MaxDistance = v
-    end, "ESP_Dist")
-
-    -- ===== WORLD =====
-    TabWorld:CreateSection("Environment")
-    addToggle(TabWorld, "Remove Fog", SilentAimSettings.RemoveFog, function(v)
-        SilentAimSettings.RemoveFog = v; applyFog()
-    end, "NoFog")
-    addToggle(TabWorld, "Custom Skybox", SilentAimSettings.CustomSkybox, function(v)
-        SilentAimSettings.CustomSkybox = v; applySkybox()
-    end, "SkyOn")
-    addDropdown(TabWorld, "Skybox", { "None", "Nebula" }, SilentAimSettings.SkyboxName or "None", function(v)
-        SilentAimSettings.SkyboxName = v; applySkybox()
-    end, "SkyN")
-    addToggle(TabWorld, "World Gradient", SilentAimSettings.WorldGradient, function(v)
-        SilentAimSettings.WorldGradient = v; applyWorldGradient()
-    end, "Grad")
-
-    -- ===== INFO =====
-    TabInfo:CreateSection("SPENT HUB")
-    TabInfo:CreateLabel({ Text = "made by spent · V1" })
-    TabInfo:CreateLabel({ Text = "Silent aim · ESP · Fast Switch · Reload Shuffle" })
-    TabInfo:CreateLabel({ Text = "Target modes: Manual · Hostile · Trespassing" })
-    TabInfo:CreateLabel({ Text = "Menu: RightShift · Unload: End" })
-    TabInfo:CreateLabel({ Text = "Hotkeys start blank — set on each bind row" })
-    pcall(function()
-        local name = LocalPlayer.DisplayName or LocalPlayer.Name
-        TabInfo:CreateLabel({ Text = "Player: " .. name .. " (@" .. LocalPlayer.Name .. ")" })
-    end)
-
-    -- ===== SETTINGS =====
-    TabSettings:CreateSection("Menu")
-    TabSettings:CreateLabel({ Text = "Toggle menu: RightShift" })
-    TabSettings:CreateLabel({ Text = "Unload: End" })
-    TabSettings:CreateLabel({ Text = "Accent locked light pink (Lunaria)" })
-    TabSettings:CreateButton({
-        Name = "Unload Hub",
-        Callback = function()
-            if getgenv().SpentUnloadHub then getgenv().SpentUnloadHub() end
+    -- Reload Shuffle (PC) — key only
+    local rsBox = Tabs.Main:AddRightGroupbox("Reload Shuffle")
+    rsBox:AddLabel("PC only · equip + reload all · 0.3s · stacked sounds")
+    local rsHost = rsBox:AddToggle("RS_KeyHost", {
+        Text = "Reload Shuffle Keybind",
+        Default = false,
+        Callback = function() end,
+    })
+    if rsHost and rsHost.AddKeyPicker then
+        rsHost:AddKeyPicker("ReloadShuffle_HK", {
+            Text = "Key",
+            Default = (SilentAimSettings.ReloadShuffleKey and SilentAimSettings.ReloadShuffleKey ~= "None") and SilentAimSettings.ReloadShuffleKey or "None",
+            Mode = "Toggle",
+            SyncToggleState = false,
+            ChangedCallback = function(key)
+                local name = typeof(key) == "EnumItem" and key.Name or tostring(key or "None")
+                if name == "" or name == "nil" then name = "None" end
+                SilentAimSettings.ReloadShuffleKey = name
+            end,
+        })
+    end
+    rsBox:AddButton({
+        Text = "Test Reload Shuffle",
+        Func = function()
+            if IS_MOBILE then
+                notify("Reload Shuffle is PC only")
+                return
+            end
+            doReloadShuffle()
         end,
     })
 
-    -- register default hotkey actions for already-set keys
+    -- ===== PLAYER =====
+    local pl = Tabs.Player:AddLeftGroupbox("Character")
+    addToggle(pl, "PL_Kor", "Korblox", SilentAimSettings.KorbloxEnabled, function(v)
+        SilentAimSettings.KorbloxEnabled = v
+        local c = LocalPlayer.Character
+        if v and c then applyKorblox(c) end
+    end)
+    addToggle(pl, "PL_Head", "Headless", SilentAimSettings.HeadlessEnabled, function(v)
+        SilentAimSettings.HeadlessEnabled = v
+        local c = LocalPlayer.Character
+        if v and c then applyHeadless(c) end
+    end)
+
+    -- ===== VISUALS =====
+    local esp = Tabs.Visuals:AddLeftGroupbox("ESP")
+    addToggleHK(esp, "ESP_On", "Enable ESP", SilentAimSettings.ESP_Enabled, function(v)
+        SilentAimSettings.ESP_Enabled = v
+    end, "ESP")
+    addToggle(esp, "ESP_Team", "Team Colors", SilentAimSettings.ESP_Team, function(v) SilentAimSettings.ESP_Team = v end)
+    addToggle(esp, "ESP_HL", "Highlight", SilentAimSettings.ESP_Highlight, function(v) SilentAimSettings.ESP_Highlight = v end)
+    addToggle(esp, "ESP_Name", "Names", SilentAimSettings.ESP_Name, function(v) SilentAimSettings.ESP_Name = v end)
+    addToggle(esp, "ESP_HP", "Health Bar", SilentAimSettings.ESP_Health, function(v) SilentAimSettings.ESP_Health = v end)
+    addToggle(esp, "ESP_Tr", "Trace Line", SilentAimSettings.ESP_Trace, function(v) SilentAimSettings.ESP_Trace = v end)
+    esp:AddSlider("ESP_Dist", {
+        Text = "Max Distance",
+        Default = SilentAimSettings.ESP_MaxDistance or 1500,
+        Min = 100, Max = 3000, Rounding = 0,
+        Callback = function(v) SilentAimSettings.ESP_MaxDistance = v end,
+    })
+
+    -- ===== WORLD =====
+    local world = Tabs.World:AddLeftGroupbox("Environment")
+    addToggle(world, "NoFog", "Remove Fog", SilentAimSettings.RemoveFog, function(v)
+        SilentAimSettings.RemoveFog = v; applyFog()
+    end)
+    addToggle(world, "SkyOn", "Custom Skybox", SilentAimSettings.CustomSkybox, function(v)
+        SilentAimSettings.CustomSkybox = v; applySkybox()
+    end)
+    world:AddDropdown("SkyN", {
+        Text = "Skybox",
+        Values = { "None", "Nebula" },
+        Default = SilentAimSettings.SkyboxName or "None",
+        Callback = function(v) if typeof(v) == "string" then SilentAimSettings.SkyboxName = v; applySkybox() end end,
+    })
+    addToggle(world, "Grad", "World Gradient", SilentAimSettings.WorldGradient, function(v)
+        SilentAimSettings.WorldGradient = v; applyWorldGradient()
+    end)
+
+    -- ===== INFO =====
+    local info = Tabs.Info:AddLeftGroupbox("SPENT HUB")
+    info:AddLabel("made by spent · V1")
+    info:AddLabel("Silent aim · ESP · Fast Switch · Reload Shuffle")
+    info:AddLabel("Target: Manual · Hostile · Trespassing")
+    info:AddLabel("Parts: Head · HRP · Arms · Legs · Random")
+    info:AddLabel("Menu: RightShift · Unload: End")
+    info:AddLabel("Hotkeys start blank — set on each toggle")
+    pcall(function()
+        info:AddLabel("Player: " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (@" .. LocalPlayer.Name .. ")")
+    end)
+
+    -- ===== SETTINGS =====
+    local menu = Tabs.Settings:AddLeftGroupbox("Menu")
+    menu:AddLabel("Toggle GUI: RightShift")
+    menu:AddLabel("Unload Hub: End")
+    menu:AddLabel("Accent locked pink")
+    menu:AddButton({
+        Text = "Unload",
+        Func = function()
+            if getgenv().SpentUnloadHub then
+                getgenv().SpentUnloadHub()
+            else
+                pcall(function() Library:Unload() end)
+            end
+        end,
+    })
+
+    -- ensure hotkey actions exist even before user changes binds
     registerHotkeyAction("SilentAim", function()
         SilentAimSettings.Enabled = not SilentAimSettings.Enabled
         notify("Silent Aim " .. (SilentAimSettings.Enabled and "on" or "off"))
@@ -1515,16 +1552,8 @@ local function loadUI()
         notify("ESP " .. (SilentAimSettings.ESP_Enabled and "on" or "off"))
     end)
 
-    pcall(function()
-        Luna:Notification({
-            Title = "SPENT HUB",
-            Content = "made by spent · loaded",
-            Icon = "check_circle",
-            ImageSource = "Material",
-        })
-    end)
-
-    return Luna
+    Library:Notify({ Title = "SPENT HUB", Description = "made by spent · loaded", Time = 4 })
+    return Library
 end
 
 
