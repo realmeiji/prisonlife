@@ -24,7 +24,7 @@ startupFrame.Position = UDim2.new(0.5, -150, 0, -80)
 startupFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 startupFrame.BackgroundTransparency = 0.08
 startupFrame.BorderSizePixel = 0
-Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.2, 0)
+Instance.new("UICorner", startupFrame).CornerRadius = UDim.new(0.12, 0)
 
 local startupStroke = Instance.new("UIStroke", startupFrame)
 startupStroke.Color = Color3.fromRGB(255, 182, 193)
@@ -120,11 +120,13 @@ local SilentAimSettings = {
     ESP_NameColor = Color3.fromRGB(255, 255, 255),
     ESP_HPColor = Color3.fromRGB(80, 255, 100),
     ESP_TraceColor = Color3.fromRGB(255, 255, 255),
-    AutoshootEnabled = false, NoclipEnabled = false,
+    AutoshootEnabled = false,
     HeadlessEnabled = false, KorbloxEnabled = false,
     FastSwitchEnabled = false, FastSwitchDelay = 0.05,
     FastSwitchList = {"M9", "Revolver", "Remington 870", "MP5", "M4A1", "M700", "AK-47"},
     NoclipPunchEnabled = false,
+    RemoveFog = false, CustomSkybox = false, SkyboxName = "None", WorldGradient = false,
+    ReloadShuffleKey = "None",
     Hotkeys = {},
 }
 getgenv().SilentAimSettings = SilentAimSettings
@@ -262,6 +264,72 @@ local ExpectedArguments = {
     Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } },
 }
 
+local _rng = Random.new()
+
+local function getWeaponSpreadRadius()
+    local char = LocalPlayer.Character
+    if not char then return 0.05 end
+    for _, t in ipairs(char:GetChildren()) do
+        if t:IsA("Tool") then
+            local sp = t:GetAttribute("SpreadRadius")
+            if typeof(sp) == "number" then return sp end
+        end
+    end
+    return 0.05
+end
+
+local function getEffectiveHitChance()
+    local base = tonumber(SilentAimSettings.HitChance) or 100
+    if base >= 100 then return 100 end
+    if base <= 0 then return 0 end
+    
+    local tgt = currentTarget
+    local char = LocalPlayer.Character
+    local myHRP = char and char:FindFirstChild("HumanoidRootPart")
+    local their = tgt and tgt.Parent and (tgt.Parent:FindFirstChild("HumanoidRootPart") or tgt)
+    
+    if myHRP and their and their:IsA("BasePart") then
+        local dist = (their.Position - myHRP.Position).Magnitude
+        if dist > 60 then
+            local t = math.clamp((dist - 60) / 190, 0, 1)
+            base = base * (1 - t * 0.70)
+        end
+    end
+    return math.clamp(base, 0, 100)
+end
+
+local function computeHitOffset(hitChance, distance, weaponSpread)
+    local baseSpread = math.clamp(weaponSpread or 0.05, 0.02, 0.20)
+    local rangeFactor = math.clamp(distance / 500, 0.4, 3.0)
+    local effectiveSpread = baseSpread * rangeFactor
+    
+    local roll = _rng:NextNumber(0, 1)
+    if roll > (hitChance / 100) then
+        local ang = _rng:NextNumber(0, math.pi * 2)
+        local r = effectiveSpread * math.sqrt(_rng:NextNumber(0, 1))
+        return Vector3.new(math.cos(ang) * r, math.sin(ang) * r, 0)
+    end
+    return Vector3.zero
+end
+
+local function getAimPointWithSpread(targetPart, origin)
+    if not targetPart or not targetPart.Parent then return nil end
+    local distance = (targetPart.Position - origin).Magnitude
+    local hitChance = getEffectiveHitChance()
+    
+    local offset = computeHitOffset(hitChance, distance, getWeaponSpreadRadius())
+    
+    local aimDir = (targetPart.Position - origin)
+    if aimDir.Magnitude < 0.001 then return targetPart.Position end
+    
+    local right = aimDir.Unit:Cross(Vector3.new(0,1,0))
+    if right.Magnitude < 0.001 then right = Vector3.new(1,0,0) end
+    right = right.Unit
+    local up = right:Cross(aimDir.Unit).Unit
+    
+    return targetPart.Position + right * offset.X + up * offset.Y
+end
+
 local function ValidateArguments(Args, RayMethod)
     local n = 0
     if #Args < RayMethod.ArgCountRequired then return false end
@@ -269,28 +337,6 @@ local function ValidateArguments(Args, RayMethod)
         if typeof(Argument) == RayMethod.Args[Pos] then n = n + 1 end
     end
     return n >= RayMethod.ArgCountRequired
-end
-
-local _rng = Random.new()
-local _shotRollExpire, _shotRollResult = 0, false
-local SHOT_ROLL_WINDOW = 0.07
-
-local function getEffectiveHitChance()
-    local base = tonumber(SilentAimSettings.HitChance) or 100
-    if base >= 100 then return 100 end
-    if base <= 0 then return 0 end
-    return math.clamp(base, 0, 100)
-end
-
-local function CalculateChance()
-    local now = tick()
-    if now < _shotRollExpire then return _shotRollResult end
-    local pct = getEffectiveHitChance()
-    if pct >= 100 then _shotRollResult = true
-    elseif pct <= 0 then _shotRollResult = false
-    else _shotRollResult = _rng:NextNumber(0, 100) < pct end
-    _shotRollExpire = now + SHOT_ROLL_WINDOW
-    return _shotRollResult
 end
 
 local function getDirection(Origin, Position) return (Position - Origin).Unit * 1000 end
@@ -363,20 +409,27 @@ local function matchesTeam(Player)
     return true
 end
 
-local function resolveTargetPart(char, partName)
-    if not char then return nil end
+local currentTarget = nil
+
+local function getPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Camera, Vector)
+    if Vec3.Z < 0 then return Vector2.new(), false end
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+
+local function resolveTargetPart(Character, partName)
+    if not Character then return nil end
     if partName == "Random" then
         for _ = 1, 6 do
             local pick = ValidTargetParts[math.random(1, #ValidTargetParts)]
-            local p = char:FindFirstChild(pick)
+            local p = Character:FindFirstChild(pick)
             if p then return p end
         end
-        return char:FindFirstChild("HumanoidRootPart")
+        return Character:FindFirstChild("HumanoidRootPart")
     end
-    return char:FindFirstChild(partName)
+    return Character:FindFirstChild(partName)
 end
 
-local currentTarget = nil
 local function getClosestPlayer()
     if not SilentAimSettings.TargetPart then return end
     local Closest, DistanceToMouse
@@ -490,9 +543,7 @@ local function castPelletRayAutoShoot(weapon, origin, aimPoint, spreadRadius)
     AutoShootRaycastInProgress = true
     local result = workspace:Raycast(origin, direction, autoShootParams)
     AutoShootRaycastInProgress = false
-    local hitInstance = result and result.Instance or nil
-    local hitPosition = result and result.Position or (origin + direction)
-    return hitInstance, hitPosition
+    return result and result.Instance or nil, result and result.Position or (origin + direction)
 end
 
 local function performAutoShot(weapon)
@@ -501,16 +552,13 @@ local function performAutoShot(weapon)
     local behavior = weapon:GetAttribute("Behavior")
     local reloadSession = weapon:GetAttribute("Local_ReloadSession") or 0
     local currentAmmo = weapon:GetAttribute("Local_CurrentAmmo") or 0
-    if reloadSession ~= 0 then return end
-    if currentAmmo <= 0 then return end
+    if reloadSession ~= 0 or currentAmmo <= 0 then return end
     local char = LocalPlayer.Character
     local head = char and char:FindFirstChild("Head")
     if not head then return end
     local origin = head.Position
     autoShootParams.FilterDescendantsInstances = { char }
-    local aimPoint = currentTarget.Position
-    local redirected = getRedirectedDirectionForAutoShoot(origin)
-    if redirected then aimPoint = origin + redirected end
+    local aimPoint = getAimPointWithSpread(currentTarget, origin) or currentTarget.Position
     local projectileCount = weapon:GetAttribute("ProjectileCount") or 1
     local spreadRadius = weapon:GetAttribute("SpreadRadius") or 0
     local muzzle = weapon:FindFirstChild("Muzzle")
@@ -554,13 +602,11 @@ RunService.Heartbeat:Connect(function()
     if not shootRemote then return end
     if not SilentAimSettings.Enabled or not SilentAimSettings.AutoshootEnabled then return end
     if not currentTarget or not currentTarget.Parent then return end
-    if not CalculateChance() then return end
     local char = LocalPlayer.Character
     local myHumanoid = char and char:FindFirstChildOfClass("Humanoid")
     if not myHumanoid or myHumanoid.Health <= 0 then return end
     local weapon = getEquippedWeapon()
-    if not weapon then return end
-    if not table.find(gunModNames, weapon.Name) then return end
+    if not weapon or not table.find(gunModNames, weapon.Name) then return end
     local fireRate = weapon:GetAttribute("FireRate") or 0.1
     local weaponAutoFireAttr = weapon:GetAttribute("AutoFire")
     if not weaponAutoFireAttr then fireRate = fireRate * 1.5 end
@@ -589,7 +635,7 @@ local function startFastSwitch()
             if not list or #list == 0 then task.wait(0.1) continue end
             for _, weaponName in ipairs(list) do
                 if not SilentAimSettings.FastSwitchEnabled then break end
-                local tool = backpack:FindFirstChild(weaponName) or char:FindFirstChild(weaponName)
+                local tool = char:FindFirstChild(weaponName) or backpack:FindFirstChild(weaponName)
                 if tool and tool:IsA("Tool") then
                     if not char:FindFirstChild(weaponName) then
                         pcall(function() humanoid:EquipTool(tool) end)
@@ -827,7 +873,7 @@ local function doReloadShuffle()
         notify("No guns to reload")
         return
     end
-    local step = math.max(0.02, 0.3 / n)
+    local step = math.max(0.01, 0.1 / n)
     task.spawn(function()
         for i, tool in ipairs(guns) do
             if not tool.Parent then continue end
@@ -838,7 +884,7 @@ local function doReloadShuffle()
         end
         for _, tool in ipairs(collectGuns()) do refillTool(tool) end
         reloadShuffleBusy = false
-        notify("Reload Shuffle · " .. tostring(n) .. " guns · 0.3s")
+        notify("Reload Shuffle · " .. tostring(n) .. " guns · 0.1s")
     end)
 end
 getgenv().SpentReloadShuffle = doReloadShuffle
@@ -884,6 +930,7 @@ local function loadUI()
         Title = "SPENT HUB", Footer = "SPENT HUB", FooterLeft = "V1", FooterRight = "made by spent",
         Icon = HUB_ICON_ASSET_ID, NotifySide = "Right", ShowCustomCursor = false, 
         Size = UDim2.fromOffset(720, 520), Center = true, Resizable = true, ToggleKeybind = Enum.KeyCode.RightShift,
+        CornerRadius = 12,
     })
 
     local Tabs = {
@@ -935,7 +982,7 @@ local function loadUI()
     fs:AddSlider("FS_Delay", { Text = "Switch Speed x100", Default = math.floor(SilentAimSettings.FastSwitchDelay * 100), Min = 1, Max = 50, Rounding = 0, Callback = function(v) SilentAimSettings.FastSwitchDelay = v / 100 end })
 
     local srBox = Tabs.Main:AddRightGroupbox("Reload Shuffle")
-    srBox:AddLabel("PC only · equip + reload all · 0.3s")
+    srBox:AddLabel("PC only · equip + reload all · 0.1s")
     srBox:AddLabel("Reload Shuffle Key"):AddKeyPicker("SR_Key", {
         Text = "Key", Default = "None", Mode = "Always", SyncToggleState = false,
         ChangedCallback = function(key)
@@ -1254,31 +1301,37 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
         end
     end
 
-    local chance = CalculateChance()
-    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and chance == true and not AutoShootRaycastInProgress then
-        if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Args, ExpectedArguments.FindPartOnRayWithIgnoreList) then
-                local r = Args[2]
-                local hit = currentTarget
-                if hit and hit.Parent then Args[2] = Ray.new(r.Origin, getDirection(r.Origin, hit.Position)) return oldNamecall(unpack(Args)) end
-            end
-        elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Args, ExpectedArguments.FindPartOnRayWithWhitelist) then
-                local r = Args[2]
-                local hit = currentTarget
-                if hit and hit.Parent then Args[2] = Ray.new(r.Origin, getDirection(r.Origin, hit.Position)) return oldNamecall(unpack(Args)) end
-            end
-        elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
-            if ValidateArguments(Args, ExpectedArguments.FindPartOnRay) then
-                local r = Args[2]
-                local hit = currentTarget
-                if hit and hit.Parent then Args[2] = Ray.new(r.Origin, getDirection(r.Origin, hit.Position)) return oldNamecall(unpack(Args)) end
-            end
-        elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Args, ExpectedArguments.Raycast) then
-                local o = Args[2]
-                local hit = currentTarget
-                if hit and hit.Parent then Args[3] = getDirection(o, hit.Position) return oldNamecall(unpack(Args)) end
+    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and not AutoShootRaycastInProgress then
+        local hit = currentTarget
+        if hit and hit.Parent then
+            if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
+                if ValidateArguments(Args, ExpectedArguments.FindPartOnRayWithIgnoreList) then
+                    local r = Args[2]
+                    local aimPoint = getAimPointWithSpread(hit, r.Origin) or hit.Position
+                    Args[2] = Ray.new(r.Origin, getDirection(r.Origin, aimPoint))
+                    return oldNamecall(unpack(Args))
+                end
+            elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
+                if ValidateArguments(Args, ExpectedArguments.FindPartOnRayWithWhitelist) then
+                    local r = Args[2]
+                    local aimPoint = getAimPointWithSpread(hit, r.Origin) or hit.Position
+                    Args[2] = Ray.new(r.Origin, getDirection(r.Origin, aimPoint))
+                    return oldNamecall(unpack(Args))
+                end
+            elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
+                if ValidateArguments(Args, ExpectedArguments.FindPartOnRay) then
+                    local r = Args[2]
+                    local aimPoint = getAimPointWithSpread(hit, r.Origin) or hit.Position
+                    Args[2] = Ray.new(r.Origin, getDirection(r.Origin, aimPoint))
+                    return oldNamecall(unpack(Args))
+                end
+            elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
+                if ValidateArguments(Args, ExpectedArguments.Raycast) then
+                    local o = Args[2]
+                    local aimPoint = getAimPointWithSpread(hit, o) or hit.Position
+                    Args[3] = getDirection(o, aimPoint)
+                    return oldNamecall(unpack(Args))
+                end
             end
         end
     end
@@ -1289,11 +1342,18 @@ local oldIndex = nil
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, i)
     if self == Mouse and not checkcaller() and SilentAimSettings.Enabled and SilentAimSettings.SilentAimMethod == "Mouse.Hit/Target" and currentTarget and currentTarget.Parent then
         local hit = currentTarget
-        if i == "Target" or i == "target" then return hit
-        elseif i == "Hit" or i == "hit" then return hit.CFrame
-        elseif i == "X" or i == "x" then return self.X
-        elseif i == "Y" or i == "y" then return self.Y
-        elseif i == "UnitRay" then return Ray.new(self.Origin, (self.Hit - self.Origin).Unit) end
+        if i == "Target" or i == "target" then
+            return hit
+        elseif i == "Hit" or i == "hit" then
+            local aimPoint = getAimPointWithSpread(hit, Camera.CFrame.Position) or hit.Position
+            return CFrame.new(aimPoint)
+        elseif i == "X" or i == "x" then
+            return self.X
+        elseif i == "Y" or i == "y" then
+            return self.Y
+        elseif i == "UnitRay" then
+            return Ray.new(self.Origin, (self.Hit - self.Origin).Unit)
+        end
     end
     return oldIndex(self, i)
 end))
