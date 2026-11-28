@@ -1550,6 +1550,7 @@ local function loadUI()
 
     -- ===================== PLAYER =====================
     local pl = Tabs.Player:AddLeftGroupbox("Character")
+    pl:AddLabel("Noclip Punch — F (PC Only)")
     safeToggle(pl, "PL_Kor", "Korblox", SilentAimSettings.KorbloxEnabled, function(v)
         SilentAimSettings.KorbloxEnabled = v
         local c = LocalPlayer.Character
@@ -2018,40 +2019,29 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 local function spentToggleMenu()
+    -- single path only — multi flips cancel each other (RShift looked broken)
     local lib = Library or getgenv().Library
-    local toggled = false
-    if lib then
-        pcall(function()
-            if type(lib.Toggle) == "function" then
-                lib:Toggle()
-                toggled = true
-            end
-        end)
-        if not toggled then
-            pcall(function()
-                if lib.Toggled ~= nil then
-                    lib.Toggled = not lib.Toggled
-                    toggled = true
-                end
-            end)
-        end
-        pcall(function()
-            if lib.ScreenGui then
-                lib.ScreenGui.Enabled = not lib.ScreenGui.Enabled
-                toggled = true
-            end
-        end)
-        pcall(function()
-            for _, key in ipairs({ "WindowContainer", "MainFrame", "Outer", "Window", "Holder" }) do
-                local root = lib[key]
-                if root and typeof(root) == "Instance" and root:IsA("GuiObject") then
-                    root.Visible = not root.Visible
-                    toggled = true
-                end
-            end
-        end)
+    if lib and type(lib.Toggle) == "function" then
+        local ok = pcall(function() lib:Toggle() end)
+        if ok then return end
     end
-    -- last resort: PlayerGui scan
+    if lib and lib.Toggled ~= nil then
+        local ok = pcall(function() lib.Toggled = not lib.Toggled end)
+        if ok then return end
+    end
+    if lib and lib.ScreenGui then
+        local ok = pcall(function() lib.ScreenGui.Enabled = not lib.ScreenGui.Enabled end)
+        if ok then return end
+    end
+    if lib then
+        for _, key in ipairs({ "WindowContainer", "MainFrame", "Outer", "Window", "Holder" }) do
+            local root = lib[key]
+            if root and typeof(root) == "Instance" and root:IsA("GuiObject") then
+                pcall(function() root.Visible = not root.Visible end)
+                return
+            end
+        end
+    end
     pcall(function()
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         if not pg then return end
@@ -2059,9 +2049,11 @@ local function spentToggleMenu()
             if g:IsA("ScreenGui") then
                 local n = g.Name:lower()
                 if n:find("obsidian") or n:find("library") or n:find("spent") or n:find("hub") then
-                    if g.Name ~= "SpentHubStartup" and g.Name ~= "SpentHubCursor" and g.Name ~= "SpentKillFX" then
+                    if g.Name ~= "SpentHubStartup" and g.Name ~= "SpentHubCursor"
+                        and g.Name ~= "SpentKillFX" and g.Name ~= "SpentHubOpenBtn"
+                        and g.Name ~= "SpentHubFastSwitchBtn" then
                         g.Enabled = not g.Enabled
-                        toggled = true
+                        return
                     end
                 end
             end
@@ -2117,6 +2109,19 @@ UserInputService.InputBegan:Connect(function(input, processed)
     -- remaining keys respect processed (game chat etc.)
     if processed then return end
 
+    -- Noclip Punch — F (PC only), no toggle
+    if input.KeyCode == Enum.KeyCode.F and not IS_MOBILE then
+        pcall(doNoclipPunch)
+    end
+
+    -- Reload Shuffle key (PC only)
+    local rs = SilentAimSettings.ReloadShuffleKey
+    if rs and rs ~= "None" and not IS_MOBILE then
+        local ok, code = pcall(function() return Enum.KeyCode[rs] end)
+        if ok and code and input.KeyCode == code then
+            pcall(doReloadShuffle)
+        end
+    end
 end)
 
 task.spawn(function()
